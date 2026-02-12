@@ -1,0 +1,43 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36414.22 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSkins.Api", "MinecraftSkins.Api\MinecraftSkins.Api.csproj", "{CD0A0749-6792-4CD5-8337-B8B7F779C3BB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSkins.Application", "MinecraftSkins.Application\MinecraftSkins.Application.csproj", "{A3E02FD7-96F6-4181-A9F7-3304AAF9E3FE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSkins.Domain", "MinecraftSkins.Domain\MinecraftSkins.Domain.csproj", "{2B1276B8-C804-44CA-85E0-32758E829D67}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSkins.Infrastructure", "MinecraftSkins.Infrastructure\MinecraftSkins.Infrastructure.csproj", "{3383A5AF-6DDF-4B61-A843-18CCB1C6E4FF}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{CD0A0749-6792-4CD5-8337-B8B7F779C3BB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CD0A0749-6792-4CD5-8337-B8B7F779C3BB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CD0A0749-6792-4CD5-8337-B8B7F779C3BB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CD0A0749-6792-4CD5-8337-B8B7F779C3BB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A3E02FD7-96F6-4181-A9F7-3304AAF9E3FE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A3E02FD7-96F6-4181-A9F7-3304AAF9E3FE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A3E02FD7-96F6-4181-A9F7-3304AAF9E3FE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A3E02FD7-96F6-4181-A9F7-3304AAF9E3FE}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2B1276B8-C804-44CA-85E0-32758E829D67}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2B1276B8-C804-44CA-85E0-32758E829D67}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2B1276B8-C804-44CA-85E0-32758E829D67}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2B1276B8-C804-44CA-85E0-32758E829D67}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3383A5AF-6DDF-4B61-A843-18CCB1C6E4FF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3383A5AF-6DDF-4B61-A843-18CCB1C6E4FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3383A5AF-6DDF-4B61-A843-18CCB1C6E4FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3383A5AF-6DDF-4B61-A843-18CCB1C6E4FF}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {BAA35A98-9AFD-45D9-B4E9-AF7EF85BE078}
+	EndGlobalSection
+EndGlobal
