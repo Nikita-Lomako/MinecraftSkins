@@ -1,6 +1,0 @@
-@MinecraftSkins.Api_HostAddress = http://localhost:5007
-
-GET {{MinecraftSkins.Api_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
