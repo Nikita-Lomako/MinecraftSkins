@@ -1,4 +1,6 @@
 using Serilog;
+using MinecraftSkins.Api;
+
 var configuration = new ConfigurationBuilder()
     .SetBasePath(Directory.GetCurrentDirectory())
     .AddJsonFile("appsettings.json")
@@ -19,11 +21,16 @@ try
 
     // Add services to the container.
     builder.Services.AddSerilog();
+    builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+    builder.Services.AddProblemDetails();
     // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
 
     var app = builder.Build();
+
+    app.UseExceptionHandler();
+    app.UseStatusCodePages();
 
     // Use Serilog request logging middleware (logs HTTP requests cleanly)
     app.UseSerilogRequestLogging();
