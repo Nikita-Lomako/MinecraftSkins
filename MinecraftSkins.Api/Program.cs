@@ -1,10 +1,22 @@
+using System.Text;
 using DotNetEnv;
+using FluentValidation;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MinecraftSkins.Api;
+using MinecraftSkins.Api.Endpoints;
+using MinecraftSkins.Application;
+using MinecraftSkins.Application.Dtos;
+using MinecraftSkins.Application.Interfaces;
+using MinecraftSkins.Application.Services;
+using MinecraftSkins.Application.Validation;
+using MinecraftSkins.Domain.IRepositories;
 using MinecraftSkins.Infrastructure.Data;
+using MinecraftSkins.Infrastructure.Repositories;
 using Serilog;
 
 // Load .env file if it exists (for local development)
@@ -40,6 +52,9 @@ try
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
         ?? throw new Exception("Database connection string not configured");
 
+    var jwtSecret = builder.Configuration["ApiSettings:Secret"]
+        ?? throw new Exception("JWT secret not configured");
+
     // DbContext
     builder.Services.AddDbContext<AppDbContext>(options =>
         options.UseNpgsql(connectionString));
@@ -51,10 +66,48 @@ try
         options.InstanceName = "MinecraftSkins_";
     });
 
+    // Register Repositories
+    builder.Services.AddScoped<ISkinRepository, SkinRepository>();
+    builder.Services.AddScoped<IPurchaseRepository, PurchaseRepository>();
+    builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+
+    // Register Services
+    builder.Services.AddScoped<ISkinService, SkinService>();
+    builder.Services.AddScoped<IPurchaseService, PurchaseService>();
+    builder.Services.AddScoped<IAuthService, AuthService>();
+    builder.Services.AddScoped<IJwtService, JwtService>();
+
+    // Register Validators
+    builder.Services.AddScoped<IValidator<SkinCreateDto>, SkinCreateDtoValidator>();
+    builder.Services.AddScoped<IValidator<SkinUpdateDto>, SkinUpdateDtoValidator>();
+    builder.Services.AddScoped<IValidator<PurchaseCreateDto>, PurchaseCreateDtoValidator>();
+
+    // Register AutoMapper
+    builder.Services.AddAutoMapper(cfg => cfg.AddProfile<MappingConfig>());
+
     // Add Identity
     builder.Services.AddIdentity<IdentityUser, IdentityRole>()
         .AddEntityFrameworkStores<AppDbContext>()
         .AddDefaultTokenProviders();
+
+    // JWT Authentication
+    builder.Services.AddAuthentication(x =>
+    {
+        x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    }).AddJwtBearer(x =>
+    {
+        x.RequireHttpsMetadata = false;
+        x.SaveToken = true;
+        x.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSecret)),
+            ValidateIssuer = false,
+            ValidateAudience = false
+        };
+    });
+    builder.Services.AddAuthorization();
 
     // Swagger
     builder.Services.AddEndpointsApiExplorer();
@@ -107,6 +160,15 @@ try
     }
 
     app.UseHttpsRedirection();
+
+    app.UseAuthentication();
+    app.UseAuthorization();
+
+    // Map Endpoints
+    app.MapSkinEndpoints();
+    app.MapPurchaseEndpoints();
+    app.MapAuthEndpoints();
+    app.MapRateEndpoints();
 
     // Fail-safe for Redis
     try

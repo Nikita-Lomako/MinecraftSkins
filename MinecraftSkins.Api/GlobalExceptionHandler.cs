@@ -64,6 +64,7 @@ public class GlobalExceptionHandler : IExceptionHandler
             KeyNotFoundException => (StatusCodes.Status404NotFound, "Not Found", exception.Message),
             ArgumentException => (StatusCodes.Status400BadRequest, "Bad Request", exception.Message),
             ValidationException => (StatusCodes.Status400BadRequest, "Validation Error", "One or more validation errors occurred."),
+            InvalidOperationException => (StatusCodes.Status409Conflict, "Conflict", exception.Message), // Для недоступных скинов
             UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized", exception.Message),
             NotImplementedException => (StatusCodes.Status501NotImplemented, "Not Implemented", exception.Message),
             OperationCanceledException => (499, "Client Closed Request", "The operation was canceled."),
