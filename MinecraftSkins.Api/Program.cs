@@ -1,11 +1,25 @@
-using Serilog;
+using DotNetEnv;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.OpenApi.Models;
 using MinecraftSkins.Api;
+using MinecraftSkins.Infrastructure.Data;
+using Serilog;
+
+// Load .env file if it exists (for local development)
+if (File.Exists(".env"))
+{
+    Env.Load();
+}
 
 var configuration = new ConfigurationBuilder()
     .SetBasePath(Directory.GetCurrentDirectory())
     .AddJsonFile("appsettings.json")
+    .AddEnvironmentVariables()
     .Build();
 
+// Serilog Configuration
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(configuration)
     .CreateLogger();
@@ -13,7 +27,6 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     Log.Information("Starting web application");
-
     var builder = WebApplication.CreateBuilder(args);
 
     // Отключаем встроенные логгеры (Console, Debug, EventSource)
@@ -23,9 +36,60 @@ try
     builder.Services.AddSerilog();
     builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
     builder.Services.AddProblemDetails();
-    // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+        ?? throw new Exception("Database connection string not configured");
+
+    // DbContext
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(connectionString));
+
+    // Redis Cache
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = builder.Configuration["Redis:Configuration"];
+        options.InstanceName = "MinecraftSkins_";
+    });
+
+    // Add Identity
+    builder.Services.AddIdentity<IdentityUser, IdentityRole>()
+        .AddEntityFrameworkStores<AppDbContext>()
+        .AddDefaultTokenProviders();
+
+    // Swagger
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
+    builder.Services.AddSwaggerGen(option =>
+    {
+        option.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+        {
+            Description = "JWT Authorization header using the Bearer scheme. \r\n\r\n " +
+                          "Enter 'Bearer' [space] and then your token in the text input below.\r\n\r\n" +
+                          "Example: \"Bearer 12345abcdef\"",
+            Name = "Authorization",
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.ApiKey,
+            Scheme = "Bearer"
+        });
+        option.AddSecurityRequirement(new OpenApiSecurityRequirement()
+        {
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.SecurityScheme,
+                        Id = "Bearer"
+                    },
+                    Scheme = "oauth2",
+                    Name = "Bearer",
+                    In = ParameterLocation.Header,
+                },
+                new List<string>()
+            }
+        });
+    });
+
+    builder.Services.AddHttpContextAccessor();
 
     var app = builder.Build();
 
@@ -44,39 +108,33 @@ try
 
     app.UseHttpsRedirection();
 
-    var summaries = new[]
+    // Fail-safe for Redis
+    try
     {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+        var redis = app.Services.GetRequiredService<IDistributedCache>();
+        _ = redis.GetStringAsync("test");
+    }
+    catch (Exception ex)
+    {
+        // If Redis is not available, we can log it and continue without caching
+        var logger = app.Services.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(ex, "Redis is not available. Caching is disabled.");
+    }
 
-    app.MapGet("/weatherforecast", () =>
+    // Database Migration
+    using (var scope = app.Services.CreateScope())
     {
-        var forecast = Enumerable.Range(1, 5).Select(index =>
-            new WeatherForecast
-            (
-                DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                Random.Shared.Next(-20, 55),
-                summaries[Random.Shared.Next(summaries.Length)]
-            ))
-            .ToArray();
-        return forecast;
-    })
-    .WithName("GetWeatherForecast")
-    .WithOpenApi();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Database.Migrate();
+    }
 
     app.Run();
 }
-catch (Exception ex)
+catch(Exception ex)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
 }
 finally
 {
     Log.CloseAndFlush();
-}
-
-
-internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
 }

@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36414.22 d17.14
+VisualStudioVersion = 17.14.36414.22
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSkins.Api", "MinecraftSkins.Api\MinecraftSkins.Api.csproj", "{CD0A0749-6792-4CD5-8337-B8B7F779C3BB}"
 EndProject
@@ -10,6 +10,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSkins.Domain", "MinecraftSkins.Domain\MinecraftSkins.Domain.csproj", "{2B1276B8-C804-44CA-85E0-32758E829D67}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSkins.Infrastructure", "MinecraftSkins.Infrastructure\MinecraftSkins.Infrastructure.csproj", "{3383A5AF-6DDF-4B61-A843-18CCB1C6E4FF}"
+EndProject
+Project("{E53339B2-1760-4266-BCC7-CA923CBCF16C}") = "docker-compose", "docker-compose.dcproj", "{81DDED9D-158B-E303-5F62-77A2896D2A5A}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,10 @@ Global
 		{3383A5AF-6DDF-4B61-A843-18CCB1C6E4FF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3383A5AF-6DDF-4B61-A843-18CCB1C6E4FF}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3383A5AF-6DDF-4B61-A843-18CCB1C6E4FF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{81DDED9D-158B-E303-5F62-77A2896D2A5A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
