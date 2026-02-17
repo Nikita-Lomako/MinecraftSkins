@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using FluentValidation;
+using System.Net.Http;
 
 namespace MinecraftSkins.Api;
 
@@ -64,10 +65,15 @@ public class GlobalExceptionHandler : IExceptionHandler
             KeyNotFoundException => (StatusCodes.Status404NotFound, "Not Found", exception.Message),
             ArgumentException => (StatusCodes.Status400BadRequest, "Bad Request", exception.Message),
             ValidationException => (StatusCodes.Status400BadRequest, "Validation Error", "One or more validation errors occurred."),
-            InvalidOperationException => (StatusCodes.Status409Conflict, "Conflict", exception.Message), // Для недоступных скинов
+            InvalidOperationException ex when ex.Message.Contains("unavailable", StringComparison.OrdinalIgnoreCase) 
+                => (StatusCodes.Status503ServiceUnavailable, "Service Unavailable", exception.Message),
+            InvalidOperationException => (StatusCodes.Status409Conflict, "Conflict", exception.Message), 
             UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, "Unauthorized", exception.Message),
             NotImplementedException => (StatusCodes.Status501NotImplemented, "Not Implemented", exception.Message),
             OperationCanceledException => (499, "Client Closed Request", "The operation was canceled."),
+            HttpRequestException => (StatusCodes.Status502BadGateway, "External Service Error", "Failed to communicate with an external service."),
+            BadHttpRequestException => (StatusCodes.Status400BadRequest, "Bad Request", "Invalid request format or parameters."),
+            System.Text.Json.JsonException => (StatusCodes.Status400BadRequest, "Invalid JSON", "The request body contains invalid JSON."),
             _ => (StatusCodes.Status500InternalServerError, "Server Error", "An unexpected error occurred")
         };
     }

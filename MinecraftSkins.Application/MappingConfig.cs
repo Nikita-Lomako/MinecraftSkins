@@ -26,8 +26,7 @@ public class MappingConfig : Profile
             .ForMember(dest => dest.DeletedAtUtc, opt => opt.Ignore());
 
         // Purchase mappings
-        CreateMap<Purchase, PurchaseDto>()
-            .ForMember(dest => dest.SkinName, opt => opt.MapFrom(src => src.Skin != null ? src.Skin.Name : null));
+        CreateMap<Purchase, PurchaseDto>();
         
         CreateMap<PurchaseCreateDto, Purchase>()
             .ForMember(dest => dest.Id, opt => opt.Ignore())

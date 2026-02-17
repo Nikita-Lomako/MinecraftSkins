@@ -1,6 +1,7 @@
 using System.Threading;
 using Microsoft.AspNetCore.Mvc;
 using MinecraftSkins.Application.Dtos;
+using MinecraftSkins.Application.Interfaces;
 
 namespace MinecraftSkins.Api.Endpoints;
 
@@ -13,32 +14,25 @@ public static class RateEndpoints
         group.MapGet("/btc-usd", GetBtcUsdRate)
             .WithName("GetBtcUsdRate")
             .Produces<BtcRateDto>(200)
-            .Produces(503);
+            .Produces(503)
+            .RequireAuthorization()
+            .RequireAuthorization(policy => policy.RequireRole("Admin")); // Requires Admin role;
     }
 
     private static async Task<IResult> GetBtcUsdRate(
+        [FromServices] IBtcRateService btcRateService,
         CancellationToken cancellationToken = default)
     {
-        try
+        var result = await btcRateService.GetBtcUsdRateAsync(cancellationToken);
+        
+        var dto = new BtcRateDto
         {
-            // TODO: Блок 3 - Реализация через IBtcRateService
-            // Пока возвращаем заглушку
-            return Results.Ok(new BtcRateDto
-            {
-                Rate = 68000m,
-                AsOfUtc = DateTime.UtcNow,
-                Source = "Placeholder",
-                AgeSeconds = 0
-            });
-        }
-        catch (OperationCanceledException)
-        {
-            return Results.StatusCode(499);
-        }
-        catch (Exception)
-        {
-            return Results.Problem("An error occurred while retrieving BTC rate", statusCode: 500);
-        }
+            Rate = result.Rate,
+            AsOfUtc = result.AsOfUtc,
+            Source = result.Source,
+            AgeSeconds = result.AgeSeconds ?? 0
+        };
+
+        return Results.Ok(dto);
     }
 }
-

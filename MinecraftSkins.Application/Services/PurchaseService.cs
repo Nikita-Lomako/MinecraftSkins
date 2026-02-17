@@ -5,6 +5,7 @@ using AutoMapper;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
 using MinecraftSkins.Application.Dtos;
+using MinecraftSkins.Application.Interfaces;
 using MinecraftSkins.Domain.IRepositories;
 using MinecraftSkins.Domain.Models;
 
@@ -14,6 +15,8 @@ public class PurchaseService : IPurchaseService
 {
     private readonly IPurchaseRepository _purchaseRepository;
     private readonly ISkinRepository _skinRepository;
+    private readonly IBtcRateService _btcRateService;
+    private readonly IPriceCalculator _priceCalculator;
     private readonly IMapper _mapper;
     private readonly IValidator<PurchaseCreateDto> _createValidator;
     private readonly ILogger<PurchaseService> _logger;
@@ -21,12 +24,16 @@ public class PurchaseService : IPurchaseService
     public PurchaseService(
         IPurchaseRepository purchaseRepository,
         ISkinRepository skinRepository,
+        IBtcRateService btcRateService,
+        IPriceCalculator priceCalculator,
         IMapper mapper,
         IValidator<PurchaseCreateDto> createValidator,
         ILogger<PurchaseService> logger)
     {
         _purchaseRepository = purchaseRepository;
         _skinRepository = skinRepository;
+        _btcRateService = btcRateService;
+        _priceCalculator = priceCalculator;
         _mapper = mapper;
         _createValidator = createValidator;
         _logger = logger;
@@ -52,26 +59,27 @@ public class PurchaseService : IPurchaseService
             throw new InvalidOperationException($"Skin with id {skinId} is not available for purchase");
         }
 
-        // TODO: Блок 3 - Получение курса через IBtcRateService
-        // TODO: Блок 3 - Расчет цены через IPriceCalculator
-        // TODO: Блок 3 - Конкурентность: Optimistic Concurrency (ConcurrencyToken в Skin)
-        // Пока используем заглушки
-        var btcRate = 68000m; // Заглушка
-        var finalPrice = skin.BasePriceUsd; // Заглушка
+        // Получение курса BTC
+        var btcRateResult = await _btcRateService.GetBtcUsdRateAsync(cancellationToken);
+        
+        // Расчет финальной цены
+        var finalPrice = _priceCalculator.CalculateFinalPrice(skin.BasePriceUsd, btcRateResult.Rate);
 
+        // TODO: Optimistic Concurrency (ConcurrencyToken в Skin) будет добавлен позже
+        
         var purchase = new Purchase
         {
             SkinId = skinId,
             BuyerId = buyerId,
             PriceUsdFinal = finalPrice,
-            BtcUsdRate = btcRate,
+            BtcUsdRate = btcRateResult.Rate,
             PurchasedAtUtc = DateTime.UtcNow
         };
 
         await _purchaseRepository.CreateAsync(purchase, cancellationToken);
 
-        _logger.LogInformation("Purchase created with id {PurchaseId} for skin {SkinId} by buyer {BuyerId}", 
-            purchase.Id, skinId, buyerId);
+        _logger.LogInformation("Purchase created with id {PurchaseId} for skin {SkinId} by buyer {BuyerId}. Price: {Price}, Rate: {Rate}", 
+            purchase.Id, skinId, buyerId, finalPrice, btcRateResult.Rate);
 
         return _mapper.Map<PurchaseDto>(purchase);
     }

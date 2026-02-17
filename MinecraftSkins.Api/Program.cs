@@ -12,11 +12,14 @@ using MinecraftSkins.Api.Endpoints;
 using MinecraftSkins.Application;
 using MinecraftSkins.Application.Dtos;
 using MinecraftSkins.Application.Interfaces;
+using MinecraftSkins.Application.Options;
 using MinecraftSkins.Application.Services;
 using MinecraftSkins.Application.Validation;
+using MinecraftSkins.Domain.Interfaces;
 using MinecraftSkins.Domain.IRepositories;
 using MinecraftSkins.Infrastructure.Data;
 using MinecraftSkins.Infrastructure.Repositories;
+using MinecraftSkins.Infrastructure.Services;
 using Serilog;
 
 // Load .env file if it exists (for local development)
@@ -60,6 +63,7 @@ try
         options.UseNpgsql(connectionString));
 
     // Redis Cache
+    builder.Services.AddMemoryCache();
     builder.Services.AddStackExchangeRedisCache(options =>
     {
         options.Configuration = builder.Configuration["Redis:Configuration"];
@@ -76,6 +80,33 @@ try
     builder.Services.AddScoped<IPurchaseService, PurchaseService>();
     builder.Services.AddScoped<IAuthService, AuthService>();
     builder.Services.AddScoped<IJwtService, JwtService>();
+    builder.Services.AddScoped<IBtcRateService, BtcRateService>();
+
+    // Register Price Calculator
+    builder.Services.Configure<PriceCalculatorOptions>(builder.Configuration.GetSection(PriceCalculatorOptions.SectionName));
+    builder.Services.AddScoped<IPriceCalculator, StandardPriceCalculator>(); // Default strategy
+    // To switch strategy, one could use a factory or configuration check here.
+    // Example:
+    // var priceStrategy = builder.Configuration["PriceCalculator:Strategy"];
+    // if (priceStrategy == "Promo") builder.Services.AddScoped<IPriceCalculator, PromoPriceCalculator>();
+    // else builder.Services.AddScoped<IPriceCalculator, StandardPriceCalculator>();
+
+    // Register BTC Rate Provider with HttpClient and Polly
+    builder.Services.AddHttpClient<IBtcRateProvider, CoinGeckoBtcRateProvider>(client =>
+    {
+        client.BaseAddress = new Uri("https://api.coingecko.com/api/v3/");
+        client.Timeout = TimeSpan.FromSeconds(10);
+        client.DefaultRequestHeaders.Add("User-Agent", "MinecraftSkinsApp/1.0");
+    })
+    .AddStandardResilienceHandler(); // Requires Microsoft.Extensions.Http.Resilience or manual Polly policy
+
+    // Register Idempotency Filter
+    builder.Services.AddScoped(sp => new MinecraftSkins.Api.Filters.IdempotencyFilter(60));
+
+    // Health Checks
+    builder.Services.AddHealthChecks()
+        .AddDbContextCheck<AppDbContext>();
+
 
     // Register Validators
     builder.Services.AddScoped<IValidator<SkinCreateDto>, SkinCreateDtoValidator>();
@@ -113,6 +144,7 @@ try
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen(option =>
     {
+        option.OperationFilter<MinecraftSkins.Api.Swagger.IdempotencyHeaderFilter>(); // Add this line
         option.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
         {
             Description = "JWT Authorization header using the Bearer scheme. \r\n\r\n " +
@@ -169,6 +201,8 @@ try
     app.MapPurchaseEndpoints();
     app.MapAuthEndpoints();
     app.MapRateEndpoints();
+    
+    app.MapHealthChecks("/health");
 
     // Fail-safe for Redis
     try

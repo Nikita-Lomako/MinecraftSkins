@@ -21,18 +21,18 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
         base.OnModelCreating(modelBuilder);
 
         // --- Identity Customization: Remove unused tables ---
-        // We only need Users for simple JWT auth.
-        // Removing Roles, Claims, Logins, Tokens to keep schema clean.
+        // We only need Users and Roles for simple JWT auth.
+        // Removing Claims, Logins, Tokens to keep schema clean.
         
-        modelBuilder.Ignore<IdentityRole>();
-        modelBuilder.Ignore<IdentityUserRole<string>>();
         modelBuilder.Ignore<IdentityUserClaim<string>>();
         modelBuilder.Ignore<IdentityUserLogin<string>>();
         modelBuilder.Ignore<IdentityRoleClaim<string>>();
         modelBuilder.Ignore<IdentityUserToken<string>>();
 
-        // Customize AspNetUsers table name if desired (optional, keeping default)
+        // Customize Identity tables name
         modelBuilder.Entity<IdentityUser>().ToTable("Users"); 
+        modelBuilder.Entity<IdentityRole>().ToTable("Roles");
+        modelBuilder.Entity<IdentityUserRole<string>>().ToTable("UserRoles");
         // ----------------------------------------------------
 
         // Apply global query filter for Soft Delete
@@ -59,6 +59,15 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
                   .HasForeignKey(p => p.SkinId)
                   .OnDelete(DeleteBehavior.Restrict); 
         });
+
+        // Seed Roles
+        var adminRoleId = "admin-role-id-seed";
+        var userRoleId = "user-role-id-seed";
+        
+        modelBuilder.Entity<IdentityRole>().HasData(
+            new IdentityRole { Id = adminRoleId, Name = "Admin", NormalizedName = "ADMIN" },
+            new IdentityRole { Id = userRoleId, Name = "User", NormalizedName = "USER" }
+        );       
 
         modelBuilder.Seed();
     }

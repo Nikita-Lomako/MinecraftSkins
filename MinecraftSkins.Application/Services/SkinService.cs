@@ -6,13 +6,17 @@ using AutoMapper;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
 using MinecraftSkins.Application.Dtos;
+using MinecraftSkins.Application.Interfaces;
 using MinecraftSkins.Domain.IRepositories;
+using MinecraftSkins.Domain.Models; // Ensure this is present
 
 namespace MinecraftSkins.Application.Services;
 
 public class SkinService : ISkinService
 {
     private readonly ISkinRepository _skinRepository;
+    private readonly IBtcRateService _btcRateService;
+    private readonly IPriceCalculator _priceCalculator;
     private readonly IMapper _mapper;
     private readonly IValidator<SkinCreateDto> _createValidator;
     private readonly IValidator<SkinUpdateDto> _updateValidator;
@@ -20,12 +24,16 @@ public class SkinService : ISkinService
 
     public SkinService(
         ISkinRepository skinRepository,
+        IBtcRateService btcRateService,
+        IPriceCalculator priceCalculator,
         IMapper mapper,
         IValidator<SkinCreateDto> createValidator,
         IValidator<SkinUpdateDto> updateValidator,
         ILogger<SkinService> logger)
     {
         _skinRepository = skinRepository;
+        _btcRateService = btcRateService;
+        _priceCalculator = priceCalculator;
         _mapper = mapper;
         _createValidator = createValidator;
         _updateValidator = updateValidator;
@@ -42,9 +50,28 @@ public class SkinService : ISkinService
         var skins = await _skinRepository.GetAllAsync(availableOnly, search, skip, take, cancellationToken);
         var skinDtos = _mapper.Map<List<SkinDto>>(skins);
 
-        // TODO: Блок 3 - Интеграция с IBtcRateService для получения курса
-        // TODO: Блок 3 - Интеграция с IPriceCalculator для расчета цены
-        // Пока FinalPrice и CurrentBtcRate остаются null
+        // Получение курса BTC и расчет цен
+        // Используем try-catch, чтобы вернуть список скинов даже если курс недоступен.
+        // Если курс недоступен, FinalPrice и CurrentBtcRate будут null.
+        
+        BtcRateResult? btcRateResult = null;
+        try
+        {
+            btcRateResult = await _btcRateService.GetBtcUsdRateAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to retrieve BTC rate. Returning skins without price calculation.");
+        }
+        
+        foreach (var dto in skinDtos)
+        {
+            if (btcRateResult is not null)
+        {
+            dto.FinalPrice = _priceCalculator.CalculateFinalPrice(dto.BasePriceUsd, btcRateResult.Rate);
+            dto.CurrentBtcRate = btcRateResult.Rate;
+            }
+        }
 
         _logger.LogInformation("Retrieved {Count} skins", skinDtos.Count);
         return skinDtos;
@@ -65,8 +92,11 @@ public class SkinService : ISkinService
 
         var skinDto = _mapper.Map<SkinDto>(skin);
 
-        // TODO: Блок 3 - Интеграция с IBtcRateService для получения курса
-        // TODO: Блок 3 - Интеграция с IPriceCalculator для расчета цены
+        // Получение курса BTC и расчет цены
+        var btcRateResult = await _btcRateService.GetBtcUsdRateAsync(cancellationToken);
+        
+        skinDto.FinalPrice = _priceCalculator.CalculateFinalPrice(skinDto.BasePriceUsd, btcRateResult.Rate);
+        skinDto.CurrentBtcRate = btcRateResult.Rate;
 
         _logger.LogInformation("Found skin with id {Id}", id);
         return skinDto;

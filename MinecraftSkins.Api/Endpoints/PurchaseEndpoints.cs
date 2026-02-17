@@ -12,21 +12,25 @@ public static class PurchaseEndpoints
     {
         var group = app.MapGroup("/api/purchases").WithTags("Purchases");
 
-        group.MapPost("/", CreatePurchase)
-            .WithName("CreatePurchase")
-            .Accepts<PurchaseCreateDto>("application/json")
-            .Produces<PurchaseDto>(201)
-            .Produces(400)
-            .Produces(409);
+            group.MapPost("/", CreatePurchase)
+                .WithName("CreatePurchase")
+                .Accepts<PurchaseCreateDto>("application/json")
+                .Produces<PurchaseDto>(201)
+                .Produces(400)
+                .Produces(409)
+                .RequireAuthorization()
+                .AddEndpointFilter<MinecraftSkins.Api.Filters.IdempotencyFilter>();
 
         group.MapGet("/", GetAllPurchases)
             .WithName("GetAllPurchases")
-            .Produces<List<PurchaseDto>>(200);
+            .Produces<List<PurchaseDto>>(200)
+            .RequireAuthorization(); // Requires auth to view purchases
 
         group.MapGet("/{id}", GetPurchaseById)
             .WithName("GetPurchaseById")
             .Produces<PurchaseDto>(200)
-            .Produces(404);
+            .Produces(404)
+            .RequireAuthorization(); // Requires auth to view purchase details
     }
 
     private static async Task<IResult> CreatePurchase(
@@ -35,34 +39,17 @@ public static class PurchaseEndpoints
         [FromBody] PurchaseCreateDto dto,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            // Мок-авторизация через X-User-Id header
-            var buyerId = httpContextAccessor.HttpContext?.Request.Headers["X-User-Id"].FirstOrDefault();
-            if (string.IsNullOrWhiteSpace(buyerId))
-            {
-                return Results.BadRequest(new { Error = "X-User-Id header is required" });
-            }
+        // Extract BuyerId from JWT claims
+        var user = httpContextAccessor.HttpContext?.User;
+        var buyerId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
-            var purchase = await purchaseService.PurchaseSkinAsync(dto.SkinId, buyerId, cancellationToken);
-            return Results.Created($"/api/purchases/{purchase.Id}", purchase);
-        }
-        catch (KeyNotFoundException ex)
+        if (string.IsNullOrWhiteSpace(buyerId))
         {
-            return Results.NotFound(new { Error = ex.Message });
+            return Results.Unauthorized();
         }
-        catch (InvalidOperationException ex)
-        {
-            return Results.Conflict(new { Error = ex.Message }); // 409 Conflict
-        }
-        catch (OperationCanceledException)
-        {
-            return Results.StatusCode(499);
-        }
-        catch (Exception)
-        {
-            return Results.Problem("An error occurred while creating the purchase", statusCode: 500);
-        }
+
+        var purchase = await purchaseService.PurchaseSkinAsync(dto.SkinId, buyerId, cancellationToken);
+        return Results.Created($"/api/purchases/{purchase.Id}", purchase);
     }
 
     private static async Task<IResult> GetAllPurchases(
@@ -75,19 +62,8 @@ public static class PurchaseEndpoints
         [FromQuery] int take = 10,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var purchases = await purchaseService.GetPurchasesAsync(buyerId, skinId, from, to, skip, take, cancellationToken);
-            return Results.Ok(purchases);
-        }
-        catch (OperationCanceledException)
-        {
-            return Results.StatusCode(499);
-        }
-        catch (Exception)
-        {
-            return Results.Problem("An error occurred while retrieving purchases", statusCode: 500);
-        }
+        var purchases = await purchaseService.GetPurchasesAsync(buyerId, skinId, from, to, skip, take, cancellationToken);
+        return Results.Ok(purchases);
     }
 
     private static async Task<IResult> GetPurchaseById(
@@ -95,21 +71,9 @@ public static class PurchaseEndpoints
         [FromServices] IPurchaseService purchaseService,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var purchase = await purchaseService.GetPurchaseByIdAsync(id, cancellationToken);
-            if (purchase == null)
-                return Results.NotFound();
-            return Results.Ok(purchase);
-        }
-        catch (OperationCanceledException)
-        {
-            return Results.StatusCode(499);
-        }
-        catch (Exception)
-        {
-            return Results.Problem("An error occurred while retrieving the purchase", statusCode: 500);
-        }
+        var purchase = await purchaseService.GetPurchaseByIdAsync(id, cancellationToken);
+        if (purchase == null)
+            return Results.NotFound();
+        return Results.Ok(purchase);
     }
 }
-

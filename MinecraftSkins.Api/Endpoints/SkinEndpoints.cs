@@ -24,19 +24,22 @@ public static class SkinEndpoints
             .WithName("CreateSkin")
             .Accepts<SkinCreateDto>("application/json")
             .Produces<SkinDto>(201)
-            .Produces(400);
+            .Produces(400)
+            .RequireAuthorization(policy => policy.RequireRole("Admin")); // Requires Admin role
 
         group.MapPut("/{id}", UpdateSkin)
             .WithName("UpdateSkin")
             .Accepts<SkinUpdateDto>("application/json")
             .Produces<SkinDto>(200)
             .Produces(400)
-            .Produces(404);
+            .Produces(404)
+            .RequireAuthorization(policy => policy.RequireRole("Admin")); // Requires Admin role
 
         group.MapDelete("/{id}", DeleteSkin)
             .WithName("DeleteSkin")
             .Produces(204)
-            .Produces(404);
+            .Produces(404)
+            .RequireAuthorization(policy => policy.RequireRole("Admin")); // Requires Admin role
     }
 
     private static async Task<IResult> GetAllSkins(
@@ -47,19 +50,8 @@ public static class SkinEndpoints
         [FromQuery] int take = 10,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var skins = await skinService.GetAllSkinsAsync(availableOnly, search, skip, take, cancellationToken);
-            return Results.Ok(skins);
-        }
-        catch (OperationCanceledException)
-        {
-            return Results.StatusCode(499); // Client Closed Request
-        }
-        catch (Exception)
-        {
-            return Results.Problem("An error occurred while retrieving skins", statusCode: 500);
-        }
+        var skins = await skinService.GetAllSkinsAsync(availableOnly, search, skip, take, cancellationToken);
+        return Results.Ok(skins);
     }
 
     private static async Task<IResult> GetSkinById(
@@ -67,21 +59,10 @@ public static class SkinEndpoints
         [FromServices] ISkinService skinService,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var skin = await skinService.GetSkinByIdAsync(id, cancellationToken);
-            if (skin == null)
-                return Results.NotFound();
-            return Results.Ok(skin);
-        }
-        catch (OperationCanceledException)
-        {
-            return Results.StatusCode(499);
-        }
-        catch (Exception)
-        {
-            return Results.Problem("An error occurred while retrieving the skin", statusCode: 500);
-        }
+        var skin = await skinService.GetSkinByIdAsync(id, cancellationToken);
+        if (skin == null)
+            return Results.NotFound();
+        return Results.Ok(skin);
     }
 
     private static async Task<IResult> CreateSkin(
@@ -89,23 +70,8 @@ public static class SkinEndpoints
         [FromBody] SkinCreateDto dto,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var createdSkin = await skinService.CreateSkinAsync(dto, cancellationToken);
-            return Results.Created($"/api/skins/{createdSkin.Id}", createdSkin);
-        }
-        catch (ArgumentException ex)
-        {
-            return Results.BadRequest(new { Error = ex.Message });
-        }
-        catch (OperationCanceledException)
-        {
-            return Results.StatusCode(499);
-        }
-        catch (Exception)
-        {
-            return Results.Problem("An error occurred while creating the skin", statusCode: 500);
-        }
+        var createdSkin = await skinService.CreateSkinAsync(dto, cancellationToken);
+        return Results.Created($"/api/skins/{createdSkin.Id}", createdSkin);
     }
 
     private static async Task<IResult> UpdateSkin(
@@ -114,25 +80,10 @@ public static class SkinEndpoints
         [FromBody] SkinUpdateDto dto,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var updatedSkin = await skinService.UpdateSkinAsync(id, dto, cancellationToken);
-            if (updatedSkin == null)
-                return Results.NotFound();
-            return Results.Ok(updatedSkin);
-        }
-        catch (ArgumentException ex)
-        {
-            return Results.BadRequest(new { Error = ex.Message });
-        }
-        catch (OperationCanceledException)
-        {
-            return Results.StatusCode(499);
-        }
-        catch (Exception)
-        {
-            return Results.Problem("An error occurred while updating the skin", statusCode: 500);
-        }
+        var updatedSkin = await skinService.UpdateSkinAsync(id, dto, cancellationToken);
+        if (updatedSkin == null)
+            return Results.NotFound();
+        return Results.Ok(updatedSkin);
     }
 
     private static async Task<IResult> DeleteSkin(
@@ -140,21 +91,9 @@ public static class SkinEndpoints
         [FromServices] ISkinService skinService,
         CancellationToken cancellationToken = default)
     {
-        try
-        {
-            var deleted = await skinService.DeleteSkinAsync(id, cancellationToken);
-            if (!deleted)
-                return Results.NotFound();
-            return Results.NoContent();
-        }
-        catch (OperationCanceledException)
-        {
-            return Results.StatusCode(499);
-        }
-        catch (Exception)
-        {
-            return Results.Problem("An error occurred while deleting the skin", statusCode: 500);
-        }
+        var deleted = await skinService.DeleteSkinAsync(id, cancellationToken);
+        if (!deleted)
+            return Results.NotFound();
+        return Results.NoContent();
     }
 }
-

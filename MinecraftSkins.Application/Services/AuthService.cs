@@ -15,17 +15,20 @@ namespace MinecraftSkins.Application.Services;
 public class AuthService : IAuthService
 {
     private readonly IAuthRepository _authRepository;
+    private readonly UserManager<IdentityUser> _userManager;
     private readonly IConfiguration _configuration;
     private readonly IJwtService _jwtService;
     private readonly ILogger<AuthService> _logger;
 
     public AuthService(
         IAuthRepository authRepository,
+        UserManager<IdentityUser> userManager,
         IConfiguration configuration,
         IJwtService jwtService,
         ILogger<AuthService> logger)
     {
         _authRepository = authRepository;
+        _userManager = userManager;
         _configuration = configuration;
         _jwtService = jwtService;
         _logger = logger;
@@ -44,11 +47,26 @@ public class AuthService : IAuthService
             return null;
         }
 
+        // Get user roles from database
+        var userRoles = await _userManager.GetRolesAsync(user);
+        
         var claims = new List<Claim>
         {
             new Claim(ClaimTypes.Name, user.UserName ?? ""),
             new Claim(ClaimTypes.NameIdentifier, user.Id)
         };
+        
+        // Add role claims from database
+        foreach (var role in userRoles)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, role));
+        }
+        
+        // If user has no roles, assign default "User" role (temporary fallback)
+        if (userRoles.Count == 0)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, "User"));
+        }
 
         var token = _jwtService.GenerateToken(claims);
         _logger.LogInformation("Login successful for user {UserName}", loginRequestDto.UserName);

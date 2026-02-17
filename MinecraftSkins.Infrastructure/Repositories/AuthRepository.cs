@@ -61,7 +61,24 @@ public class AuthRepository : IAuthRepository
             return null;
         }
 
-        _logger.LogDebug("Registration successful for user {Username}", username);
+        // Assign default "User" role to newly registered user
+        var roleResult = await _userManager.AddToRoleAsync(user, "User");
+        if (!roleResult.Succeeded)
+        {
+            var errors = string.Join(", ", roleResult.Errors.Select(e => e.Description));
+            _logger.LogError("Failed to assign User role to {Username} - {Errors}. Rolling back user creation.", username, errors);
+            
+            // Rollback: delete the user if role assignment failed
+            var deleteResult = await _userManager.DeleteAsync(user);
+            if (!deleteResult.Succeeded)
+            {
+                _logger.LogError("Failed to rollback user creation for {Username}. User may be in inconsistent state.", username);
+            }
+            
+            return null;
+        }
+
+        _logger.LogDebug("Registration successful for user {Username} with User role", username);
         return user;
     }
 }
