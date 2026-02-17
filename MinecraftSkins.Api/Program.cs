@@ -1,9 +1,40 @@
+using System.Text;
+using DotNetEnv;
+using FluentValidation;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using MinecraftSkins.Api;
+using MinecraftSkins.Api.Endpoints;
+using MinecraftSkins.Application;
+using MinecraftSkins.Application.Dtos;
+using MinecraftSkins.Application.Interfaces;
+using MinecraftSkins.Application.Options;
+using MinecraftSkins.Application.Services;
+using MinecraftSkins.Application.Validation;
+using MinecraftSkins.Domain.Interfaces;
+using MinecraftSkins.Domain.IRepositories;
+using MinecraftSkins.Infrastructure.Data;
+using MinecraftSkins.Infrastructure.Repositories;
+using MinecraftSkins.Infrastructure.Services;
 using Serilog;
+
+// Load .env file if it exists (for local development)
+if (File.Exists(".env"))
+{
+    Env.Load();
+}
+
 var configuration = new ConfigurationBuilder()
     .SetBasePath(Directory.GetCurrentDirectory())
     .AddJsonFile("appsettings.json")
+    .AddEnvironmentVariables()
     .Build();
 
+// Serilog Configuration
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(configuration)
     .CreateLogger();
@@ -11,7 +42,6 @@ Log.Logger = new LoggerConfiguration()
 try
 {
     Log.Information("Starting web application");
-
     var builder = WebApplication.CreateBuilder(args);
 
     // Отключаем встроенные логгеры (Console, Debug, EventSource)
@@ -19,11 +49,137 @@ try
 
     // Add services to the container.
     builder.Services.AddSerilog();
-    // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+    builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+    builder.Services.AddProblemDetails();
+
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+        ?? throw new Exception("Database connection string not configured");
+
+    var jwtSecret = builder.Configuration["ApiSettings:Secret"]
+        ?? throw new Exception("JWT secret not configured");
+
+    // DbContext
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(connectionString));
+
+    // Redis Cache
+    builder.Services.AddMemoryCache();
+    builder.Services.AddStackExchangeRedisCache(options =>
+    {
+        options.Configuration = builder.Configuration["Redis:Configuration"];
+        options.InstanceName = "MinecraftSkins_";
+    });
+
+    // Register Repositories
+    builder.Services.AddScoped<ISkinRepository, SkinRepository>();
+    builder.Services.AddScoped<IPurchaseRepository, PurchaseRepository>();
+    builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+
+    // Register Services
+    builder.Services.AddScoped<ISkinService, SkinService>();
+    builder.Services.AddScoped<IPurchaseService, PurchaseService>();
+    builder.Services.AddScoped<IAuthService, AuthService>();
+    builder.Services.AddScoped<IJwtService, JwtService>();
+    builder.Services.AddScoped<IBtcRateService, BtcRateService>();
+
+    // Register Price Calculator
+    builder.Services.Configure<PriceCalculatorOptions>(builder.Configuration.GetSection(PriceCalculatorOptions.SectionName));
+    builder.Services.AddScoped<IPriceCalculator, StandardPriceCalculator>(); // Default strategy
+    // To switch strategy, one could use a factory or configuration check here.
+    // Example:
+    // var priceStrategy = builder.Configuration["PriceCalculator:Strategy"];
+    // if (priceStrategy == "Promo") builder.Services.AddScoped<IPriceCalculator, PromoPriceCalculator>();
+    // else builder.Services.AddScoped<IPriceCalculator, StandardPriceCalculator>();
+
+    // Register BTC Rate Provider with HttpClient and Polly
+    builder.Services.AddHttpClient<IBtcRateProvider, CoinGeckoBtcRateProvider>(client =>
+    {
+        client.BaseAddress = new Uri("https://api.coingecko.com/api/v3/");
+        client.Timeout = TimeSpan.FromSeconds(10);
+        client.DefaultRequestHeaders.Add("User-Agent", "MinecraftSkinsApp/1.0");
+    })
+    .AddStandardResilienceHandler(); // Requires Microsoft.Extensions.Http.Resilience or manual Polly policy
+
+    // Register Idempotency Filter
+    builder.Services.AddScoped(sp => new MinecraftSkins.Api.Filters.IdempotencyFilter(60));
+
+    // Health Checks
+    builder.Services.AddHealthChecks()
+        .AddDbContextCheck<AppDbContext>();
+
+
+    // Register Validators
+    builder.Services.AddScoped<IValidator<SkinCreateDto>, SkinCreateDtoValidator>();
+    builder.Services.AddScoped<IValidator<SkinUpdateDto>, SkinUpdateDtoValidator>();
+    builder.Services.AddScoped<IValidator<PurchaseCreateDto>, PurchaseCreateDtoValidator>();
+
+    // Register AutoMapper
+    builder.Services.AddAutoMapper(cfg => cfg.AddProfile<MappingConfig>());
+
+    // Add Identity
+    builder.Services.AddIdentity<IdentityUser, IdentityRole>()
+        .AddEntityFrameworkStores<AppDbContext>()
+        .AddDefaultTokenProviders();
+
+    // JWT Authentication
+    builder.Services.AddAuthentication(x =>
+    {
+        x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    }).AddJwtBearer(x =>
+    {
+        x.RequireHttpsMetadata = false;
+        x.SaveToken = true;
+        x.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSecret)),
+            ValidateIssuer = false,
+            ValidateAudience = false
+        };
+    });
+    builder.Services.AddAuthorization();
+
+    // Swagger
     builder.Services.AddEndpointsApiExplorer();
-    builder.Services.AddSwaggerGen();
+    builder.Services.AddSwaggerGen(option =>
+    {
+        option.OperationFilter<MinecraftSkins.Api.Swagger.IdempotencyHeaderFilter>(); // Add this line
+        option.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+        {
+            Description = "JWT Authorization header using the Bearer scheme. \r\n\r\n " +
+                          "Enter 'Bearer' [space] and then your token in the text input below.\r\n\r\n" +
+                          "Example: \"Bearer 12345abcdef\"",
+            Name = "Authorization",
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.ApiKey,
+            Scheme = "Bearer"
+        });
+        option.AddSecurityRequirement(new OpenApiSecurityRequirement()
+        {
+            {
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference
+                    {
+                        Type = ReferenceType.SecurityScheme,
+                        Id = "Bearer"
+                    },
+                    Scheme = "oauth2",
+                    Name = "Bearer",
+                    In = ParameterLocation.Header,
+                },
+                new List<string>()
+            }
+        });
+    });
+
+    builder.Services.AddHttpContextAccessor();
 
     var app = builder.Build();
+
+    app.UseExceptionHandler();
+    app.UseStatusCodePages();
 
     // Use Serilog request logging middleware (logs HTTP requests cleanly)
     app.UseSerilogRequestLogging();
@@ -37,39 +193,44 @@ try
 
     app.UseHttpsRedirection();
 
-    var summaries = new[]
-    {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
+    app.UseAuthentication();
+    app.UseAuthorization();
 
-    app.MapGet("/weatherforecast", () =>
+    // Map Endpoints
+    app.MapSkinEndpoints();
+    app.MapPurchaseEndpoints();
+    app.MapAuthEndpoints();
+    app.MapRateEndpoints();
+    
+    app.MapHealthChecks("/health");
+
+    // Fail-safe for Redis
+    try
     {
-        var forecast = Enumerable.Range(1, 5).Select(index =>
-            new WeatherForecast
-            (
-                DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                Random.Shared.Next(-20, 55),
-                summaries[Random.Shared.Next(summaries.Length)]
-            ))
-            .ToArray();
-        return forecast;
-    })
-    .WithName("GetWeatherForecast")
-    .WithOpenApi();
+        var redis = app.Services.GetRequiredService<IDistributedCache>();
+        _ = redis.GetStringAsync("test");
+    }
+    catch (Exception ex)
+    {
+        // If Redis is not available, we can log it and continue without caching
+        var logger = app.Services.GetRequiredService<ILogger<Program>>();
+        logger.LogWarning(ex, "Redis is not available. Caching is disabled.");
+    }
+
+    // Database Migration
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        db.Database.Migrate();
+    }
 
     app.Run();
 }
-catch (Exception ex)
+catch(Exception ex)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");
 }
 finally
 {
     Log.CloseAndFlush();
-}
-
-
-internal record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
 }
