@@ -44,6 +44,14 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
             entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
             entity.Property(e => e.BasePriceUsd).HasPrecision(18, 8); 
             entity.Property(e => e.BasePriceUsd).IsRequired();
+            
+            // Unique constraint on Name to prevent duplicates
+            entity.HasIndex(e => e.Name).IsUnique();
+            
+            // Optimistic Concurrency with RowVersion (using Fluent API instead of [Timestamp] attribute)
+            // IsRowVersion() automatically sets the property as a concurrency token
+            entity.Property(e => e.RowVersion)
+                .IsRowVersion();
         });
 
         modelBuilder.Entity<Purchase>(entity =>

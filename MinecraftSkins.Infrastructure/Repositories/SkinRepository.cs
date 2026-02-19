@@ -51,8 +51,8 @@ public class SkinRepository : ISkinRepository
         cancellationToken.ThrowIfCancellationRequested();
         _logger.LogDebug("Getting skin {Id}", id);
 
+        // Use tracking to get RowVersion for optimistic concurrency
         var result = await _db.Skins
-            .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
 
         if (result != null)
@@ -67,10 +67,48 @@ public class SkinRepository : ISkinRepository
         return result;
     }
 
+    public async Task<Skin?> GetByIdIncludingDeletedAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        _logger.LogDebug("Getting skin {Id} including soft-deleted", id);
+
+        // Use IgnoreQueryFilters to get skin even if it's soft-deleted
+        // This is used for users who purchased a skin and need to view its details
+        var result = await _db.Skins
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+
+        if (result != null)
+        {
+            _logger.LogDebug("Found skin {Id} (IsDeleted: {IsDeleted})", id, result.IsDeleted);
+        }
+        else
+        {
+            _logger.LogDebug("Skin {Id} not found", id);
+        }
+
+        return result;
+    }
+
     public async Task CreateAsync(Skin skin, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        _logger.LogDebug("Creating skin {Id}", skin.Id);
+        _logger.LogDebug("Creating skin {Id} with name {Name}", skin.Id, skin.Name);
+
+        // Check for duplicate name (case-insensitive) including soft-deleted skins
+        // Use IgnoreQueryFilters() to check ALL skins, including soft-deleted ones
+        // This prevents reusing names of soft-deleted skins, as they may be referenced in purchases
+        var existingSkin = await _db.Skins
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.Name.ToLower() == skin.Name.ToLower(), cancellationToken);
+        
+        if (existingSkin != null)
+        {
+            _logger.LogWarning("Skin with name {Name} already exists (Id: {ExistingId}, IsDeleted: {IsDeleted})", 
+                skin.Name, existingSkin.Id, existingSkin.IsDeleted);
+            throw new InvalidOperationException($"Skin with name '{skin.Name}' already exists");
+        }
 
         await _db.Skins.AddAsync(skin, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
@@ -81,7 +119,20 @@ public class SkinRepository : ISkinRepository
     public async Task UpdateAsync(Skin skin, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        _logger.LogDebug("Updating skin {Id}", skin.Id);
+        _logger.LogDebug("Updating skin {Id} with name {Name}", skin.Id, skin.Name);
+
+        // Check for duplicate name (excluding current skin) including soft-deleted skins
+        // Use IgnoreQueryFilters() to check ALL skins, including soft-deleted ones
+        var existingSkin = await _db.Skins
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(s => s.Name.ToLower() == skin.Name.ToLower() && s.Id != skin.Id, cancellationToken);
+        
+        if (existingSkin != null)
+        {
+            _logger.LogWarning("Skin with name {Name} already exists (Id: {ExistingId}, IsDeleted: {IsDeleted})", 
+                skin.Name, existingSkin.Id, existingSkin.IsDeleted);
+            throw new InvalidOperationException($"Skin with name '{skin.Name}' already exists");
+        }
 
         _db.Skins.Update(skin);
         await _db.SaveChangesAsync(cancellationToken);

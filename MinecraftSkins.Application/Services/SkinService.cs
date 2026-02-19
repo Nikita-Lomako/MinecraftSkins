@@ -102,6 +102,38 @@ public class SkinService : ISkinService
         return skinDto;
     }
 
+    public async Task<SkinDto?> GetSkinByIdIncludingDeletedAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Getting skin with id {Id} including soft-deleted", id);
+
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var skin = await _skinRepository.GetByIdIncludingDeletedAsync(id, cancellationToken);
+        if (skin == null)
+        {
+            _logger.LogWarning("Skin with id {Id} not found (including soft-deleted)", id);
+            return null;
+        }
+
+        var skinDto = _mapper.Map<SkinDto>(skin);
+
+        // Получение курса BTC и расчет цены
+        // Используем try-catch, чтобы вернуть скин даже если курс недоступен
+        try
+        {
+            var btcRateResult = await _btcRateService.GetBtcUsdRateAsync(cancellationToken);
+            skinDto.FinalPrice = _priceCalculator.CalculateFinalPrice(skinDto.BasePriceUsd, btcRateResult.Rate);
+            skinDto.CurrentBtcRate = btcRateResult.Rate;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to retrieve BTC rate for skin {Id}. Returning skin without price calculation.", id);
+        }
+
+        _logger.LogInformation("Found skin with id {Id} (IsDeleted: {IsDeleted})", id, skin.IsDeleted);
+        return skinDto;
+    }
+
     public async Task<SkinDto> CreateSkinAsync(SkinCreateDto dto, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation("Creating skin with name {Name}", dto.Name);

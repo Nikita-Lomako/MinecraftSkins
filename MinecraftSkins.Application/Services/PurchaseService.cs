@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using AutoMapper;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using MinecraftSkins.Application.Dtos;
 using MinecraftSkins.Application.Interfaces;
@@ -65,7 +67,8 @@ public class PurchaseService : IPurchaseService
         // Расчет финальной цены
         var finalPrice = _priceCalculator.CalculateFinalPrice(skin.BasePriceUsd, btcRateResult.Rate);
 
-        // TODO: Optimistic Concurrency (ConcurrencyToken в Skin) будет добавлен позже
+        // Optimistic Concurrency: сохраняем RowVersion для проверки при сохранении
+        var originalRowVersion = skin.RowVersion;
         
         var purchase = new Purchase
         {
@@ -76,12 +79,53 @@ public class PurchaseService : IPurchaseService
             PurchasedAtUtc = DateTime.UtcNow
         };
 
-        await _purchaseRepository.CreateAsync(purchase, cancellationToken);
+        try
+        {
+            await _purchaseRepository.CreateAsync(purchase, cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            _logger.LogWarning(ex, 
+                "Concurrency conflict detected when purchasing skin {SkinId} by buyer {BuyerId}. " +
+                "Skin may have been modified or deleted by another user.", skinId, buyerId);
+            
+            // Перезагружаем скин из БД для проверки текущего состояния
+            var currentSkin = await _skinRepository.GetByIdAsync(skinId, cancellationToken);
+            
+            if (currentSkin == null)
+            {
+                _logger.LogWarning("Skin {SkinId} was deleted during purchase attempt", skinId);
+                throw new KeyNotFoundException($"Skin with id {skinId} was deleted and is no longer available");
+            }
+            
+            if (currentSkin.IsDeleted)
+            {
+                _logger.LogWarning("Skin {SkinId} was soft-deleted during purchase attempt", skinId);
+                throw new InvalidOperationException($"Skin with id {skinId} was deleted and is no longer available");
+            }
+            
+            if (!currentSkin.IsAvailable)
+            {
+                _logger.LogWarning("Skin {SkinId} became unavailable during purchase attempt", skinId);
+                throw new InvalidOperationException($"Skin with id {skinId} is no longer available for purchase");
+            }
+            
+            // Если скин все еще доступен, но RowVersion изменился - это одновременная покупка
+            // В этом случае выбрасываем исключение о конфликте конкурентности
+            _logger.LogWarning("Concurrent purchase detected for skin {SkinId}. Another purchase may have occurred simultaneously.", skinId);
+            throw new InvalidOperationException(
+                "The skin was modified by another user. Please refresh and try again.");
+        }
 
         _logger.LogInformation("Purchase created with id {PurchaseId} for skin {SkinId} by buyer {BuyerId}. Price: {Price}, Rate: {Rate}", 
             purchase.Id, skinId, buyerId, finalPrice, btcRateResult.Rate);
 
-        return _mapper.Map<PurchaseDto>(purchase);
+        var purchaseDto = _mapper.Map<PurchaseDto>(purchase);
+        
+        // Загружаем информацию о скине (уже есть в переменной skin, но для консистентности используем репозиторий)
+        purchaseDto.Skin = _mapper.Map<SkinPurchaseDto>(skin);
+        
+        return purchaseDto;
     }
 
     public async Task<List<PurchaseDto>> GetPurchasesAsync(string? buyerId, Guid? skinId, DateTime? from, DateTime? to, int skip, int take, CancellationToken cancellationToken = default)
@@ -93,6 +137,43 @@ public class PurchaseService : IPurchaseService
 
         var purchases = await _purchaseRepository.GetAllAsync(buyerId, skinId, from, to, skip, take, cancellationToken);
         var purchaseDtos = _mapper.Map<List<PurchaseDto>>(purchases);
+
+        // Загружаем информацию о скинах отдельными запросами (включая soft-deleted)
+        // Оптимизация: загружаем параллельно для лучшей производительности
+        var uniqueSkinIds = purchaseDtos.Select(p => p.SkinId).Distinct().ToList();
+        var skinsDict = new Dictionary<Guid, SkinPurchaseDto>();
+        
+        if (uniqueSkinIds.Any())
+        {
+            var skinTasks = uniqueSkinIds.Select(async id =>
+            {
+                var skin = await _skinRepository.GetByIdIncludingDeletedAsync(id, cancellationToken);
+                if (skin != null)
+                {
+                    return (id, _mapper.Map<SkinPurchaseDto>(skin));
+                }
+                return ((Guid id, SkinPurchaseDto dto)?)null;
+            });
+            
+            var skinResults = await Task.WhenAll(skinTasks);
+            
+            foreach (var result in skinResults)
+            {
+                if (result.HasValue)
+                {
+                    skinsDict[result.Value.id] = result.Value.dto;
+                }
+            }
+        }
+
+        // Присваиваем информацию о скинах
+        foreach (var purchaseDto in purchaseDtos)
+        {
+            if (skinsDict.TryGetValue(purchaseDto.SkinId, out var skinDto))
+            {
+                purchaseDto.Skin = skinDto;
+            }
+        }
 
         _logger.LogInformation("Retrieved {Count} purchases", purchaseDtos.Count);
         return purchaseDtos;
@@ -111,7 +192,16 @@ public class PurchaseService : IPurchaseService
             return null;
         }
 
+        var purchaseDto = _mapper.Map<PurchaseDto>(purchase);
+        
+        // Загружаем информацию о скине отдельным запросом (включая soft-deleted)
+        var skin = await _skinRepository.GetByIdIncludingDeletedAsync(purchase.SkinId, cancellationToken);
+        if (skin != null)
+        {
+            purchaseDto.Skin = _mapper.Map<SkinPurchaseDto>(skin);
+        }
+
         _logger.LogInformation("Found purchase with id {Id}", id);
-        return _mapper.Map<PurchaseDto>(purchase);
+        return purchaseDto;
     }
 }

@@ -11,6 +11,7 @@ public class MappingConfig : Profile
     {
         // Skin mappings
         CreateMap<Skin, SkinDto>();
+        CreateMap<Skin, SkinPurchaseDto>();
         CreateMap<SkinCreateDto, Skin>()
             .ForMember(dest => dest.Id, opt => opt.Ignore())
             .ForMember(dest => dest.CreatedAtUtc, opt => opt.MapFrom(src => DateTime.UtcNow))
