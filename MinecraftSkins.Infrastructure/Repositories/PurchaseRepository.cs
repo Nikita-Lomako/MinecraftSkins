@@ -25,7 +25,6 @@ public class PurchaseRepository : IPurchaseRepository
             buyerId, skinId, from, to, skip, take);
 
         var query = _db.Purchases
-            .Include(p => p.Skin)
             .AsNoTracking()
             .AsQueryable();
 
@@ -49,14 +48,36 @@ public class PurchaseRepository : IPurchaseRepository
             query = query.Where(p => p.PurchasedAtUtc <= to.Value);
         }
 
-        var result = await query
+        var purchases = await query
             .OrderByDescending(p => p.PurchasedAtUtc)
             .Skip(skip)
             .Take(take)
             .ToListAsync(cancellationToken);
 
-        _logger.LogDebug("Retrieved {Count} purchases", result.Count);
-        return result;
+        // Load Skin navigation with IgnoreQueryFilters to include soft-deleted skins
+        // Users who purchased a skin should be able to view its details even if it was deleted
+        var skinIds = purchases.Select(p => p.SkinId).Distinct().ToList();
+        if (skinIds.Any())
+        {
+            var skins = await _db.Skins
+                .IgnoreQueryFilters()
+                .Where(s => skinIds.Contains(s.Id))
+                .ToListAsync(cancellationToken);
+            
+            var skinDict = skins.ToDictionary(s => s.Id);
+            
+            // Manually assign Skin navigation property
+            foreach (var purchase in purchases)
+            {
+                if (skinDict.TryGetValue(purchase.SkinId, out var skin))
+                {
+                    purchase.Skin = skin;
+                }
+            }
+        }
+
+        _logger.LogDebug("Retrieved {Count} purchases", purchases.Count);
+        return purchases;
     }
 
     public async Task<Purchase?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -64,13 +85,23 @@ public class PurchaseRepository : IPurchaseRepository
         cancellationToken.ThrowIfCancellationRequested();
         _logger.LogDebug("Getting purchase {Id}", id);
 
-        var result = await _db.Purchases
-            .Include(p => p.Skin)
+        var purchase = await _db.Purchases
             .AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 
-        if (result != null)
+        if (purchase != null)
         {
+            // Load Skin navigation with IgnoreQueryFilters to include soft-deleted skins
+            // Users who purchased a skin should be able to view its details even if it was deleted
+            var skin = await _db.Skins
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(s => s.Id == purchase.SkinId, cancellationToken);
+            
+            if (skin != null)
+            {
+                purchase.Skin = skin;
+            }
+            
             _logger.LogDebug("Found purchase {Id}", id);
         }
         else
@@ -78,7 +109,7 @@ public class PurchaseRepository : IPurchaseRepository
             _logger.LogDebug("Purchase {Id} not found", id);
         }
 
-        return result;
+        return purchase;
     }
 
     public async Task CreateAsync(Purchase purchase, CancellationToken cancellationToken = default)
@@ -86,10 +117,53 @@ public class PurchaseRepository : IPurchaseRepository
         cancellationToken.ThrowIfCancellationRequested();
         _logger.LogDebug("Creating purchase {Id}", purchase.Id);
 
-        await _db.Purchases.AddAsync(purchase, cancellationToken);
-        await _db.SaveChangesAsync(cancellationToken);
+        // Use transaction to ensure atomicity and check skin state with optimistic concurrency
+        using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            // Re-check skin state in transaction to detect concurrent modifications
+            var skin = await _db.Skins
+                .FirstOrDefaultAsync(s => s.Id == purchase.SkinId, cancellationToken);
 
-        _logger.LogDebug("Successfully created purchase {Id}", purchase.Id);
+            if (skin == null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw new KeyNotFoundException($"Skin with id {purchase.SkinId} not found");
+            }
+
+            if (skin.IsDeleted)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw new InvalidOperationException($"Skin with id {purchase.SkinId} was deleted and is no longer available");
+            }
+
+            if (!skin.IsAvailable)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                throw new InvalidOperationException($"Skin with id {purchase.SkinId} is not available for purchase");
+            }
+
+            // If we reach here, skin is valid - create purchase
+            // Note: We don't modify Skin, so DbUpdateConcurrencyException won't occur here
+            // But if Skin was modified (e.g., IsAvailable changed), we already checked above
+            await _db.Purchases.AddAsync(purchase, cancellationToken);
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            _logger.LogDebug("Successfully created purchase {Id}", purchase.Id);
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            _logger.LogWarning(ex, "Concurrency conflict when creating purchase {Id}", purchase.Id);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            _logger.LogError(ex, "Error creating purchase {Id}. Transaction rolled back.", purchase.Id);
+            throw; // Пробрасываем для обработки в GlobalExceptionHandler
+        }
     }
 
     public async Task<ICollection<Purchase>> GetByBuyerIdAsync(string buyerId, CancellationToken cancellationToken = default)
@@ -97,14 +171,33 @@ public class PurchaseRepository : IPurchaseRepository
         cancellationToken.ThrowIfCancellationRequested();
         _logger.LogDebug("Getting purchases for buyer {BuyerId}", buyerId);
 
-        var result = await _db.Purchases
-            .Include(p => p.Skin)
+        var purchases = await _db.Purchases
             .AsNoTracking()
             .Where(p => p.BuyerId == buyerId)
             .OrderByDescending(p => p.PurchasedAtUtc)
             .ToListAsync(cancellationToken);
 
-        _logger.LogDebug("Retrieved {Count} purchases for buyer {BuyerId}", result.Count, buyerId);
-        return result;
+        // Load Skin navigation with IgnoreQueryFilters to include soft-deleted skins
+        var skinIds = purchases.Select(p => p.SkinId).Distinct().ToList();
+        if (skinIds.Any())
+        {
+            var skins = await _db.Skins
+                .IgnoreQueryFilters()
+                .Where(s => skinIds.Contains(s.Id))
+                .ToListAsync(cancellationToken);
+            
+            var skinDict = skins.ToDictionary(s => s.Id);
+            
+            foreach (var purchase in purchases)
+            {
+                if (skinDict.TryGetValue(purchase.SkinId, out var skin))
+                {
+                    purchase.Skin = skin;
+                }
+            }
+        }
+
+        _logger.LogDebug("Retrieved {Count} purchases for buyer {BuyerId}", purchases.Count, buyerId);
+        return purchases;
     }
 }

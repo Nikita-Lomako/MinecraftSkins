@@ -5,10 +5,13 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using MinecraftSkins.Api;
+using MinecraftSkins.Api.Configuration;
 using MinecraftSkins.Api.Endpoints;
+using MinecraftSkins.Api.Extensions;
 using MinecraftSkins.Application;
 using MinecraftSkins.Application.Dtos;
 using MinecraftSkins.Application.Interfaces;
@@ -91,21 +94,26 @@ try
     // if (priceStrategy == "Promo") builder.Services.AddScoped<IPriceCalculator, PromoPriceCalculator>();
     // else builder.Services.AddScoped<IPriceCalculator, StandardPriceCalculator>();
 
-    // Register BTC Rate Provider with HttpClient and Polly
-    builder.Services.AddHttpClient<IBtcRateProvider, CoinGeckoBtcRateProvider>(client =>
-    {
-        client.BaseAddress = new Uri("https://api.coingecko.com/api/v3/");
-        client.Timeout = TimeSpan.FromSeconds(10);
-        client.DefaultRequestHeaders.Add("User-Agent", "MinecraftSkinsApp/1.0");
-    })
-    .AddStandardResilienceHandler(); // Requires Microsoft.Extensions.Http.Resilience or manual Polly policy
+    // Register BTC Rate Providers with Factory pattern and Polly resilience
+    // Configuration: "BtcRateProvider:Provider" = "CoinGecko" or "Binance"
+    builder.Services.AddBtcRateProviders(builder.Configuration);
 
     // Register Idempotency Filter
     builder.Services.AddScoped(sp => new MinecraftSkins.Api.Filters.IdempotencyFilter(60));
 
+    // Register HTTP Message Handlers for HttpClient
+    builder.Services.AddTransient<MinecraftSkins.Api.Handlers.RateLimiterHandler>();
+    builder.Services.AddTransient<MinecraftSkins.Api.Handlers.PollyLoggingHandler>();
+
     // Health Checks
     builder.Services.AddHealthChecks()
-        .AddDbContextCheck<AppDbContext>();
+        .AddDbContextCheck<AppDbContext>(name: "Database")
+        .AddCheck<MinecraftSkins.Api.HealthChecks.BtcRateProviderHealthCheck>(
+            name: "BTC Rate Provider",
+            tags: new[] { "external", "api" })
+        .AddCheck<MinecraftSkins.Api.HealthChecks.RedisHealthCheck>(
+            name: "Redis",
+            tags: new[] { "cache", "redis" });
 
 
     // Register Validators
@@ -172,6 +180,14 @@ try
                 new List<string>()
             }
         });
+        
+        // Добавляем health checks endpoint в Swagger документацию
+        option.SwaggerDoc("v1", new OpenApiInfo
+        {
+            Title = "MinecraftSkins API",
+            Version = "v1",
+            Description = "API для продажи Minecraft-скинов с BTC-индексированным ценообразованием"
+        });
     });
 
     builder.Services.AddHttpContextAccessor();
@@ -201,8 +217,7 @@ try
     app.MapPurchaseEndpoints();
     app.MapAuthEndpoints();
     app.MapRateEndpoints();
-    
-    app.MapHealthChecks("/health");
+    app.MapHealthEndpoints();
 
     // Fail-safe for Redis
     try

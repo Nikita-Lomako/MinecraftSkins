@@ -20,7 +20,8 @@ public class BtcRateService : IBtcRateService
 
     private const string CacheKey = "btc_usd_rate";
     private static BtcRateResult? _lastSuccessfulRate; // Fallback in memory
-    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan MemoryCacheTtl = TimeSpan.FromSeconds(60); // L1 cache TTL
+    private static readonly TimeSpan RedisCacheTtl = TimeSpan.FromMinutes(5); // L2 cache TTL (longer than L1)
     private static readonly TimeSpan FallbackTtl = TimeSpan.FromMinutes(10);
 
     public BtcRateService(
@@ -37,7 +38,7 @@ public class BtcRateService : IBtcRateService
 
     public async Task<BtcRateResult> GetBtcUsdRateAsync(CancellationToken cancellationToken = default)
     {
-        // 1. L1 Cache (Memory)
+        // 1. L1 Cache (Memory) - fastest, expires after 60 seconds
         if (_memoryCache.TryGetValue(CacheKey, out BtcRateResult? cachedRate) && cachedRate != null)
         {
             cachedRate.Source = "Cache (Memory)";
@@ -45,7 +46,7 @@ public class BtcRateService : IBtcRateService
             return cachedRate;
         }
 
-        // 2. L2 Cache (Redis)
+        // 2. L2 Cache (Redis) - slower but persists longer (5 minutes)
         // Здесь мы ОБЯЗАНЫ использовать try-catch для Redis, так как падение кэша не должно ломать основную логику.
         // Это не "ошибка бизнес-логики", которую ловит GlobalHandler, а "отказ инфраструктуры", который мы должны пережить.
         try
@@ -56,7 +57,8 @@ public class BtcRateService : IBtcRateService
                 var redisRate = JsonSerializer.Deserialize<BtcRateResult>(redisValue);
                 if (redisRate != null)
                 {
-                    _memoryCache.Set(CacheKey, redisRate, CacheTtl);
+                    // Refresh L1 cache from Redis
+                    _memoryCache.Set(CacheKey, redisRate, MemoryCacheTtl);
                     redisRate.Source = "Cache (Redis)";
                     redisRate.AgeSeconds = (int)(DateTime.UtcNow - redisRate.AsOfUtc).TotalSeconds;
                     return redisRate;
@@ -74,34 +76,13 @@ public class BtcRateService : IBtcRateService
         try
         {
             var freshRate = await _btcRateProvider.GetBtcUsdRateAsync(cancellationToken);
-            
-            // Success - update caches
-            _memoryCache.Set(CacheKey, freshRate, CacheTtl);
-            _lastSuccessfulRate = freshRate;
-            
-            // Fire-and-forget Redis update (safe)
-            try
-            {
-                await _distributedCache.SetStringAsync(
-                    CacheKey, 
-                    JsonSerializer.Serialize(freshRate), 
-                    new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = CacheTtl },
-                    cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to update Redis cache");
-            }
-
-            freshRate.Source = "External";
-            freshRate.AgeSeconds = 0;
-            return freshRate;
+            return await UpdateCachesAndReturn(freshRate, cancellationToken);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "External provider failed. Attempting fallback.");
 
-            // 4. Fallback
+            // 4. Fallback to cached value
             if (_lastSuccessfulRate != null)
             {
                 var age = DateTime.UtcNow - _lastSuccessfulRate.AsOfUtc;
@@ -118,9 +99,36 @@ public class BtcRateService : IBtcRateService
                 }
             }
             
-            // Если fallback не помог — пробрасываем исключение выше.
-            // GlobalExceptionHandler его поймает и вернет 500/503.
-            throw; 
+            // Если fallback не помог — выбрасываем исключение, которое будет маппиться в 503 Service Unavailable.
+            // Это корректный статус для случая, когда внешний сервис недоступен и нет кэшированных данных.
+            throw new InvalidOperationException(
+                "BTC rate service is unavailable. External provider failed and no cached data available.", 
+                ex); 
         }
+    }
+    
+    private async Task<BtcRateResult> UpdateCachesAndReturn(BtcRateResult freshRate, CancellationToken cancellationToken)
+    {
+        // Success - update caches
+        _memoryCache.Set(CacheKey, freshRate, MemoryCacheTtl);
+        _lastSuccessfulRate = freshRate;
+        
+        // Update Redis cache with longer TTL (5 minutes) for L2 caching
+        try
+        {
+            await _distributedCache.SetStringAsync(
+                CacheKey, 
+                JsonSerializer.Serialize(freshRate), 
+                new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = RedisCacheTtl },
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to update Redis cache");
+        }
+
+        freshRate.Source = freshRate.Source ?? "External";
+        freshRate.AgeSeconds = 0;
+        return freshRate;
     }
 }

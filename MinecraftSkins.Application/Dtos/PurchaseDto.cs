@@ -8,5 +8,8 @@ public class PurchaseDto
     public decimal BtcUsdRate { get; set; }
     public DateTime PurchasedAtUtc { get; set; }
     public string BuyerId { get; set; } = string.Empty;
+    
+    // Информация о скине (загружается отдельным запросом, включая soft-deleted)
+    public SkinPurchaseDto? Skin { get; set; }
 }
 

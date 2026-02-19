@@ -14,4 +14,7 @@ public class Skin : ISoftDeletable, IEntity
     // Soft Delete properties
     public bool IsDeleted { get; set; }
     public DateTime? DeletedAtUtc { get; set; }
+    
+    // Optimistic Concurrency
+    public byte[]? RowVersion { get; set; }
 }

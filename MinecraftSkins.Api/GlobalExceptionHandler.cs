@@ -24,7 +24,11 @@ public class GlobalExceptionHandler : IExceptionHandler
         CancellationToken cancellationToken)
     {
         _logger.LogError(
-            exception, "Exception occurred: {Message}", exception.Message);
+            exception,
+            "Unhandled exception occurred. Method: {Method}, Path: {Path}, TraceId: {TraceId}",
+            httpContext.Request.Method,
+            httpContext.Request.Path,
+            httpContext.TraceIdentifier);
 
         var (statusCode, title, detail) = MapException(exception);
 
