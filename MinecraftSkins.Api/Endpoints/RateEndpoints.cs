@@ -15,8 +15,7 @@ public static class RateEndpoints
             .WithName("GetBtcUsdRate")
             .Produces<BtcRateDto>(200)
             .Produces(503)
-            .RequireAuthorization()
-            .RequireAuthorization(policy => policy.RequireRole("Admin")); // Requires Admin role;
+            .RequireAuthorization(policy => policy.RequireRole("Admin"));
     }
 
     private static async Task<IResult> GetBtcUsdRate(

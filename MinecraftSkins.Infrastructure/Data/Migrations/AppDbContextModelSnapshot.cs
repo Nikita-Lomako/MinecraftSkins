@@ -268,6 +268,132 @@ namespace MinecraftSkins.Infrastructure.Data.Migrations
                             IsAvailable = false,
                             IsDeleted = false,
                             Name = "Skeleton"
+                        },
+                        new
+                        {
+                            Id = new Guid("77777777-7777-7777-7777-777777777777"),
+                            BasePriceUsd = 15.00m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = true,
+                            IsDeleted = false,
+                            Name = "Herobrine"
+                        },
+                        new
+                        {
+                            Id = new Guid("88888888-8888-8888-8888-888888888888"),
+                            BasePriceUsd = 2.00m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = true,
+                            IsDeleted = false,
+                            Name = "Pig"
+                        },
+                        new
+                        {
+                            Id = new Guid("99999999-9999-9999-9999-999999999999"),
+                            BasePriceUsd = 2.50m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = true,
+                            IsDeleted = false,
+                            Name = "Cow"
+                        },
+                        new
+                        {
+                            Id = new Guid("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                            BasePriceUsd = 2.25m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = true,
+                            IsDeleted = false,
+                            Name = "Sheep"
+                        },
+                        new
+                        {
+                            Id = new Guid("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"),
+                            BasePriceUsd = 1.75m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = true,
+                            IsDeleted = false,
+                            Name = "Chicken"
+                        },
+                        new
+                        {
+                            Id = new Guid("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+                            BasePriceUsd = 25.00m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = true,
+                            IsDeleted = false,
+                            Name = "Ender Dragon"
+                        },
+                        new
+                        {
+                            Id = new Guid("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+                            BasePriceUsd = 20.00m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = true,
+                            IsDeleted = false,
+                            Name = "Wither"
+                        },
+                        new
+                        {
+                            Id = new Guid("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"),
+                            BasePriceUsd = 6.00m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = true,
+                            IsDeleted = false,
+                            Name = "Spider"
+                        },
+                        new
+                        {
+                            Id = new Guid("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+                            BasePriceUsd = 10.00m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = true,
+                            IsDeleted = false,
+                            Name = "Diamond Steve"
+                        },
+                        new
+                        {
+                            Id = new Guid("a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1"),
+                            BasePriceUsd = 4.50m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = true,
+                            IsDeleted = false,
+                            Name = "Villager"
+                        },
+                        new
+                        {
+                            Id = new Guid("b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2"),
+                            BasePriceUsd = 8.00m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = true,
+                            IsDeleted = false,
+                            Name = "Witch"
+                        },
+                        new
+                        {
+                            Id = new Guid("c3c3c3c3-c3c3-c3c3-c3c3-c3c3c3c3c3c3"),
+                            BasePriceUsd = 11.00m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = true,
+                            IsDeleted = false,
+                            Name = "Blaze"
+                        },
+                        new
+                        {
+                            Id = new Guid("d4d4d4d4-d4d4-d4d4-d4d4-d4d4d4d4d4d4"),
+                            BasePriceUsd = 9.00m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = false,
+                            IsDeleted = false,
+                            Name = "Ghast"
+                        },
+                        new
+                        {
+                            Id = new Guid("e5e5e5e5-e5e5-e5e5-e5e5-e5e5e5e5e5e5"),
+                            BasePriceUsd = 3.00m,
+                            CreatedAtUtc = new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc),
+                            IsAvailable = true,
+                            IsDeleted = false,
+                            Name = "Slime"
                         });
                 });
 

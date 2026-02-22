@@ -54,6 +54,7 @@ public static class PurchaseEndpoints
 
     private static async Task<IResult> GetAllPurchases(
         [FromServices] IPurchaseService purchaseService,
+        [FromServices] IHttpContextAccessor httpContextAccessor,
         [FromQuery] string? buyerId,
         [FromQuery] Guid? skinId,
         [FromQuery] DateTime? from,
@@ -62,6 +63,10 @@ public static class PurchaseEndpoints
         [FromQuery] int take = 10,
         CancellationToken cancellationToken = default)
     {
+        var user = httpContextAccessor.HttpContext?.User;
+        var currentUserId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(buyerId) && !string.IsNullOrEmpty(currentUserId))
+            buyerId = currentUserId;
         var purchases = await purchaseService.GetPurchasesAsync(buyerId, skinId, from, to, skip, take, cancellationToken);
         return Results.Ok(purchases);
     }

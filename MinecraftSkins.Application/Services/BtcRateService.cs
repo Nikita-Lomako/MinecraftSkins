@@ -20,8 +20,8 @@ public class BtcRateService : IBtcRateService
 
     private const string CacheKey = "btc_usd_rate";
     private static BtcRateResult? _lastSuccessfulRate; // Fallback in memory
-    private static readonly TimeSpan MemoryCacheTtl = TimeSpan.FromSeconds(60); // L1 cache TTL
-    private static readonly TimeSpan RedisCacheTtl = TimeSpan.FromMinutes(5); // L2 cache TTL (longer than L1)
+    private static readonly TimeSpan MemoryCacheTtl = TimeSpan.FromSeconds(20); // L1 cache TTL
+    private static readonly TimeSpan RedisCacheTtl = TimeSpan.FromSeconds(60); // L2 cache TTL — не более 1 минуты для актуального курса
     private static readonly TimeSpan FallbackTtl = TimeSpan.FromMinutes(10);
 
     public BtcRateService(
@@ -46,7 +46,7 @@ public class BtcRateService : IBtcRateService
             return cachedRate;
         }
 
-        // 2. L2 Cache (Redis) - slower but persists longer (5 minutes)
+        // 2. L2 Cache (Redis) — TTL 1 минута, затем повторный запрос к провайдеру
         // Здесь мы ОБЯЗАНЫ использовать try-catch для Redis, так как падение кэша не должно ломать основную логику.
         // Это не "ошибка бизнес-логики", которую ловит GlobalHandler, а "отказ инфраструктуры", который мы должны пережить.
         try
@@ -113,7 +113,7 @@ public class BtcRateService : IBtcRateService
         _memoryCache.Set(CacheKey, freshRate, MemoryCacheTtl);
         _lastSuccessfulRate = freshRate;
         
-        // Update Redis cache with longer TTL (5 minutes) for L2 caching
+        // Обновляем Redis с TTL 1 минута
         try
         {
             await _distributedCache.SetStringAsync(

@@ -8,10 +8,10 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using MinecraftSkins.Api;
 using MinecraftSkins.Api.Configuration;
 using MinecraftSkins.Api.Endpoints;
 using MinecraftSkins.Api.Extensions;
+using MinecraftSkins.Api.Handlers;
 using MinecraftSkins.Application;
 using MinecraftSkins.Application.Dtos;
 using MinecraftSkins.Application.Interfaces;
@@ -21,6 +21,7 @@ using MinecraftSkins.Application.Validation;
 using MinecraftSkins.Domain.Interfaces;
 using MinecraftSkins.Domain.IRepositories;
 using MinecraftSkins.Infrastructure.Data;
+using MinecraftSkins.Infrastructure.Data.Extensions;
 using MinecraftSkins.Infrastructure.Repositories;
 using MinecraftSkins.Infrastructure.Services;
 using Serilog;
@@ -88,13 +89,10 @@ try
     // Register Price Calculator
     builder.Services.Configure<PriceCalculatorOptions>(builder.Configuration.GetSection(PriceCalculatorOptions.SectionName));
     builder.Services.AddScoped<IPriceCalculator, StandardPriceCalculator>(); // Default strategy
-    // To switch strategy, one could use a factory or configuration check here.
+    // To switch strategy, use example below.
     // Example:
-    // var priceStrategy = builder.Configuration["PriceCalculator:Strategy"];
-    // if (priceStrategy == "Promo") builder.Services.AddScoped<IPriceCalculator, PromoPriceCalculator>();
-    // else builder.Services.AddScoped<IPriceCalculator, StandardPriceCalculator>();
+    // builder.Services.AddScoped<IPriceCalculator, PromoPriceCalculator>();
 
-    // Register BTC Rate Providers with Factory pattern and Polly resilience
     // Configuration: "BtcRateProvider:Provider" = "CoinGecko" or "Binance"
     builder.Services.AddBtcRateProviders(builder.Configuration);
 
@@ -192,6 +190,19 @@ try
 
     builder.Services.AddHttpContextAccessor();
 
+    // CORS: разрешаем запросы с фронтенда (docker-compose: порт 3000; локальная разработка: 5173)
+    builder.Services.AddCors(options =>
+    {
+        options.AddDefaultPolicy(policy =>
+        {
+            var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+            if (origins?.Length > 0)
+                policy.WithOrigins(origins).AllowAnyMethod().AllowAnyHeader();
+            else
+                policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+        });
+    });
+
     var app = builder.Build();
 
     app.UseExceptionHandler();
@@ -208,6 +219,8 @@ try
     }
 
     app.UseHttpsRedirection();
+
+    app.UseCors();
 
     app.UseAuthentication();
     app.UseAuthorization();
@@ -232,11 +245,17 @@ try
         logger.LogWarning(ex, "Redis is not available. Caching is disabled.");
     }
 
-    // Database Migration
+    // Database: apply migration (schema + roles + skins from ModelBuilder.Seed) then seed users
+    // Users are seeded here, not in AppDbContext.Seed(), because passwords must be hashed with UserManager at runtime.
     using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         db.Database.Migrate();
+
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var scopeLogger = scope.ServiceProvider.GetService<ILogger<Program>>();
+        await DataSeeder.EnsureSeedUsersAsync(userManager, roleManager, scopeLogger);
     }
 
     app.Run();

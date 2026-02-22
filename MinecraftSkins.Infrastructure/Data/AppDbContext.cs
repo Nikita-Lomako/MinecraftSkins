@@ -20,10 +20,9 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
     {
         base.OnModelCreating(modelBuilder);
 
-        // --- Identity Customization: Remove unused tables ---
-        // We only need Users and Roles for simple JWT auth.
-        // Removing Claims, Logins, Tokens to keep schema clean.
-        
+        // --- Identity: minimal schema (Users, Roles, UserRoles only). ---
+        // Ignore Claims/Logins/Tokens so those tables are not created.
+        // Warning "mapped explicitly then ignored" is expected: base maps them first, we then ignore.
         modelBuilder.Ignore<IdentityUserClaim<string>>();
         modelBuilder.Ignore<IdentityUserLogin<string>>();
         modelBuilder.Ignore<IdentityRoleClaim<string>>();
@@ -65,7 +64,7 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
             entity.HasOne(p => p.Skin)
                   .WithMany()
                   .HasForeignKey(p => p.SkinId)
-                  .OnDelete(DeleteBehavior.Restrict); 
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Seed Roles
