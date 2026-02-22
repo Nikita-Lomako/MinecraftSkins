@@ -8,10 +8,10 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
-using MinecraftSkins.Api;
 using MinecraftSkins.Api.Configuration;
 using MinecraftSkins.Api.Endpoints;
 using MinecraftSkins.Api.Extensions;
+using MinecraftSkins.Api.Handlers;
 using MinecraftSkins.Application;
 using MinecraftSkins.Application.Dtos;
 using MinecraftSkins.Application.Interfaces;
@@ -192,6 +192,19 @@ try
 
     builder.Services.AddHttpContextAccessor();
 
+    // CORS: разрешаем запросы с фронтенда (docker-compose: порт 3000; локальная разработка: 5173)
+    builder.Services.AddCors(options =>
+    {
+        options.AddDefaultPolicy(policy =>
+        {
+            var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+            if (origins?.Length > 0)
+                policy.WithOrigins(origins).AllowAnyMethod().AllowAnyHeader();
+            else
+                policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+        });
+    });
+
     var app = builder.Build();
 
     app.UseExceptionHandler();
@@ -208,6 +221,8 @@ try
     }
 
     app.UseHttpsRedirection();
+
+    app.UseCors();
 
     app.UseAuthentication();
     app.UseAuthorization();

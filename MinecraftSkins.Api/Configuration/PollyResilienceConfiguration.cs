@@ -27,8 +27,8 @@ public static class PollyResilienceConfiguration
         Microsoft.Extensions.Logging.ILogger? logger = null)
     {
         // ATTEMPT TIMEOUT - реализация паттерна TIMEOUT
-        // Ограничивает время выполнения ОДНОЙ попытки запроса
-        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(5);
+        // Ограничивает время выполнения ОДНОЙ попытки запроса (для CoinGecko и др. внешних API)
+        options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(15);
         
         // RETRY POLICY - реализация паттерна RETRY с экспоненциальной задержкой
         options.Retry.MaxRetryAttempts = 3;
@@ -37,8 +37,8 @@ public static class PollyResilienceConfiguration
         // UseJitter is enabled by default
         
         // CIRCUIT BREAKER - реализация паттерна CIRCUIT BREAKER
-        // SamplingDuration должен быть минимум в 2 раза больше AttemptTimeout
-        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(20);
+        // SamplingDuration должен быть минимум в 2 раза больше AttemptTimeout (15s → 30s)
+        options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
         options.CircuitBreaker.FailureRatio = 0.5; // 50% ошибок -> размыкание цепи
         options.CircuitBreaker.MinimumThroughput = 2; // Минимум 2 запроса для анализа
         options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(5); // Время "отдыха"

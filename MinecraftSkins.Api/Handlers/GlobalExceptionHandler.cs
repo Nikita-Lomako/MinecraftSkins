@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using FluentValidation;
 using System.Net.Http;
 
-namespace MinecraftSkins.Api;
+namespace MinecraftSkins.Api.Handlers;
 
 public class GlobalExceptionHandler : IExceptionHandler
 {

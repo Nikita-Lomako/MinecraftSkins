@@ -12,7 +12,8 @@ public class SkinCreateDtoValidator : AbstractValidator<SkinCreateDto>
             .MaximumLength(100);
 
         RuleFor(x => x.BasePriceUsd)
-            .GreaterThan(0);
+            .GreaterThan(0)
+            .LessThanOrEqualTo(999_999.99m);
 
         RuleFor(x => x.IsAvailable)
             .NotNull();
