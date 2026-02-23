@@ -61,6 +61,14 @@ public class PurchaseService : IPurchaseService
             throw new InvalidOperationException($"Skin with id {skinId} is not available for purchase");
         }
 
+        // Проверка: пользователь может купить каждый скин только один раз
+        var existingPurchases = await _purchaseRepository.GetAllAsync(buyerId, skinId, null, null, 0, 1, cancellationToken);
+        if (existingPurchases.Any())
+        {
+            _logger.LogWarning("User {BuyerId} already purchased skin {SkinId}", buyerId, skinId);
+            throw new InvalidOperationException("You have already purchased this skin");
+        }
+
         // Получение курса BTC
         var btcRateResult = await _btcRateService.GetBtcUsdRateAsync(cancellationToken);
         

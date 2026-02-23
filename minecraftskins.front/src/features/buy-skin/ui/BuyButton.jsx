@@ -41,7 +41,11 @@ export function BuyButton({ skinId, skinName, onSuccess, onError }) {
       >
         {loading ? 'Buying…' : `Buy ${skinName}`}
       </Button>
-      {error && <p className="text-danger small mt-1">{error}</p>}
+      {error && (
+        <div className="alert alert-warning mt-2 mb-0" role="alert">
+          <strong>Error:</strong> {error}
+        </div>
+      )}
     </div>
   );
 }

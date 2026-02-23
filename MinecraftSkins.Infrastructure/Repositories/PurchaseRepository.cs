@@ -152,6 +152,14 @@ public class PurchaseRepository : IPurchaseRepository
 
             _logger.LogDebug("Successfully created purchase {Id}", purchase.Id);
         }
+        catch (DbUpdateException ex) when (ex.InnerException?.Message?.Contains("IX_Purchases_BuyerId_SkinId") == true || 
+                                            ex.InnerException?.Message?.Contains("duplicate key") == true ||
+                                            ex.InnerException?.Message?.Contains("unique constraint") == true)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            _logger.LogWarning(ex, "Duplicate purchase attempt for buyer {BuyerId} and skin {SkinId}", purchase.BuyerId, purchase.SkinId);
+            throw new InvalidOperationException("You have already purchased this skin");
+        }
         catch (DbUpdateConcurrencyException ex)
         {
             await transaction.RollbackAsync(cancellationToken);
