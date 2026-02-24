@@ -25,6 +25,8 @@ using MinecraftSkins.Infrastructure.Data.Extensions;
 using MinecraftSkins.Infrastructure.Repositories;
 using MinecraftSkins.Infrastructure.Services;
 using Serilog;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 
 // Load .env file if it exists (for local development)
 if (File.Exists(".env"))
@@ -190,6 +192,20 @@ try
 
     builder.Services.AddHttpContextAccessor();
 
+    // OpenTelemetry metrics pipeline:
+    builder.Services.AddOpenTelemetry()
+        .ConfigureResource(resource => resource.AddService(
+    serviceName: "MinecraftSkinsAPI",
+    serviceVersion: "1.0.0"))
+        .WithMetrics(metrics =>
+        {
+            metrics
+                .AddAspNetCoreInstrumentation()
+                .AddHttpClientInstrumentation()
+                .AddRuntimeInstrumentation()
+                .AddPrometheusExporter();
+        });
+
     // CORS: разрешаем запросы с фронтенда (docker-compose: порт 3000; локальная разработка: 5173)
     builder.Services.AddCors(options =>
     {
@@ -218,12 +234,15 @@ try
         app.UseSwaggerUI();
     }
 
-    app.UseHttpsRedirection();
+    app.UseWhen(
+        context => !context.Request.Path.StartsWithSegments("/metrics"),
+        branch => branch.UseHttpsRedirection());
 
     app.UseCors();
 
     app.UseAuthentication();
     app.UseAuthorization();
+    app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
     // Map Endpoints
     app.MapSkinEndpoints();
