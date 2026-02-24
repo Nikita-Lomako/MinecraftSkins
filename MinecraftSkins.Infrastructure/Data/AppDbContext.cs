@@ -65,6 +65,10 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
                   .WithMany()
                   .HasForeignKey(p => p.SkinId)
                   .OnDelete(DeleteBehavior.Restrict);
+            
+            // Unique constraint: each user can buy each skin only once
+            entity.HasIndex(p => new { p.BuyerId, p.SkinId })
+                  .IsUnique();
         });
 
         // Seed Roles
