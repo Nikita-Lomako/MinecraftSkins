@@ -13,6 +13,9 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["MinecraftSkins.Api/MinecraftSkins.Api.csproj", "MinecraftSkins.Api/"]
+COPY ["MinecraftSkins.Infrastructure/MinecraftSkins.Infrastructure.csproj", "MinecraftSkins.Infrastructure/"]
+COPY ["MinecraftSkins.Domain/MinecraftSkins.Domain.csproj", "MinecraftSkins.Domain/"]
+COPY ["MinecraftSkins.Application/MinecraftSkins.Application.csproj", "MinecraftSkins.Application/"]
 RUN dotnet restore "./MinecraftSkins.Api/MinecraftSkins.Api.csproj"
 COPY . .
 WORKDIR "/src/MinecraftSkins.Api"

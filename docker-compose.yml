@@ -1,0 +1,86 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: minecraftskins_db
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME:-MinecraftSkinsDb}
+      POSTGRES_USER: ${DB_USER:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    image: ${DOCKER_REGISTRY-}minecraftskinsapi
+    build:
+      context: .
+      dockerfile: MinecraftSkins.Api/Dockerfile
+    depends_on:
+      - db
+      - redis
+    environment:
+      - ApiSettings__Secret=${JWT_SECRET}
+      - ConnectionStrings__DefaultConnection=Host=db;Port=5432;Database=${DB_NAME:-MinecraftSkinsDb};Username=${DB_USER:-postgres};Password=${DB_PASSWORD}
+      - Redis__Configuration=redis:6379,password=${REDIS_PASSWORD}
+      - ASPNETCORE_HTTP_PORTS=8080
+      - ASPNETCORE_HTTPS_PORTS=8081
+    ports:
+        - "8080:8080"
+        - "8081:8081"
+
+  redis:
+    image: redis:alpine
+    container_name: minecraftskins_redis
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  frontend:
+    image: ${DOCKER_REGISTRY-}minecraftskinsfront
+    build:
+      context: ./minecraftskins.front
+      dockerfile: Dockerfile
+      args:
+        # URL API с точки зрения браузера (хост пользователя). Для доступа с хоста: http://localhost:8080/api
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080/api}
+    ports:
+      - "3001:80"
+    depends_on:
+      - api
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: minecraftskins_prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: minecraftskins_grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+    depends_on:
+      - prometheus
+
+volumes:
+  pgdata:
+  redisdata:
+  promdata:
+  grafanadata:
