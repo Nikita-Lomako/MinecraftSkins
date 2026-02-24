@@ -1,106 +1,91 @@
-# MinecraftSkins
+# MinecraftSkins (BTC-indexed pricing)
 
-Сервис продажи Minecraft-скинов с привязкой цены к курсу BTC/USD. 
-В ТЗ: разделённая архитектура, чёткие границы слоёв, управляемые зависимости, интеграция с внешними API.
+Сервис продажи Minecraft-скинов, где финальная цена рассчитывается динамически на основе курса BTC/USD.
 
-**Backend:** ASP.NET Core 8, Minimal API, EF Core.  
-**Frontend:** React + Vite + JavaScript (отдельный проект в minecraftskins.front).
+Проект выполнен в формате mini production приложения:
+- разделенная архитектура (Domain / Application / Infrastructure / API + отдельный Frontend на React + Vite + Js),
+- централизованные зависимости и конфигурация,
+- аккуратная интеграция с внешними сервисами (курс BTC, Redis, Prometheus, Grafana),
+- воспроизводимый запуск через Docker Compose.
 
----
+## Технологии
+
+### Backend
+- .NET 8, ASP.NET Core Minimal API
+- EF Core + PostgreSQL
+- ASP.NET Core Identity + JWT Bearer auth
+- FluentValidation, AutoMapper
+- IMemoryCache + Redis (L1/L2 cache для курса BTC)
+- HttpClientFactory + resilience handlers (timeout/retry/circuit breaker/rate limiting)
+- Serilog
+- OpenTelemetry + Prometheus exporter + Grafana
+
+### Frontend
+- React + Vite + JavaScript
+- React Router
+- разделение по зонам ответственности(FSD) (`app/pages/features/entities/shared`)
 
 ## Содержание
 
-- Запуск
-- Миграции
-- Формула расчёта цены
-- API (endpoints)
 - Архитектура
+- Бизнес-правила
+- API
+- Обработка ошибок
 - Конфигурация
+- Запуск
+- Миграции и сидирование
+- Observability (OpenTelemetry/Prometheus/Grafana)
+- Тесты
 
----
+## Архитектура
 
-## Запуск
+Решение разделено на 4 backend-проекта + отдельный frontend:
 
-### Через Docker Compose (рекомендуется)
+- `MinecraftSkins.Domain`
+  - сущности и доменные контракты без инфраструктурных зависимостей;
+  - `Skin`, `Purchase`, `BtcRateResult`;
+  - интерфейсы репозиториев и провайдеров (`ISkinRepository`, `IPurchaseRepository`, `IBtcRateProvider`).
 
-В корне репозитория создайте файл **`.env`** (можно скопировать из примера ниже), задайте пароли и секреты.
+- `MinecraftSkins.Application`
+  - use-cases и бизнес-правила;
+  - сервисы: `SkinService`, `PurchaseService`, `BtcRateService`, `AuthService`;
+  - `IPriceCalculator` + стратегии `StandardPriceCalculator`, `PromoPriceCalculator`;
+  - DTO, маппинг, валидация.
 
-**Пример .env:**
+- `MinecraftSkins.Infrastructure`
+  - EF Core (`AppDbContext`), миграции, репозитории;
+  - интеграции с внешними API курса BTC (CoinGecko/Binance);
+  - persistence, query-фильтры, soft delete, concurrency handling.
 
-```env
-# Database Configuration
-DB_HOST=localhost
-DB_NAME=MinecraftSkinsDb
-DB_USER=postgres
-DB_PASSWORD=ваш_пароль
+- `MinecraftSkins.Api`
+  - composition root, DI, middleware;
+  - Minimal API endpoints, Swagger;
+  - JWT auth, ProblemDetails, health checks;
+  - idempotency filter;
+  - OpenTelemetry metrics pipeline + `/metrics`.
 
-# Redis Configuration
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=ваш пароль для redis
+- `minecraftskins.front`
+  - SPA, интеграция с backend API;
+  - регистрация/аутентификация, каталог скинов, детали скина, список покупок, admin-страницы(просмотр курса, удаление/обновление/добавление скинов).
 
-# JWT Secret
-JWT_SECRET=ваш_длинный_секрет_для_подписи_токенов
+Ключевой принцип: API зависит от Application/Infrastructure, Application и Infrastructure зависят от Domain,Domain-слой не от кого не зависит.
 
-как пример можно взять:
-K4t5N6R7u8V9wXyZaBcDeFgHiJkLmNoPqRsTuVwXyZaBcDeFgHiJkLmNoPqRsT
-или
-5f3c9a1b2d4e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1
+## Бизнес-правила
 
-#Vite + React
-VITE_API_BASE_URL=https://localhost:8081/api
-```
+### 1) Курс BTC/USD и отказоустойчивость
 
-**Запуск:**
+`BtcRateService` реализует 3-уровневую стратегию:
+- L1: `IMemoryCache` (быстрый cache);
+- L2: `IDistributedCache` (Redis);
+- внешний провайдер через `IBtcRateProvider`.
 
-```bash
-docker-compose up --build
-```
+Если внешний API недоступен:
+- используется fallback на последнее успешное значение (если не слишком старое);
+- если fallback устарел/отсутствует -> `503 Service Unavailable`.
 
-После старта:
+### 2) Расчет финальной цены
 
-| Сервис      | URL |
-|------------|-----|
-| **Фронтенд** | http://localhost:3000 |
-| **API (HTTP)** | http://localhost:8080 |
-| **Swagger** | http://localhost:8080/swagger |
-| **API (HTTPS)** | https://localhost:8081 |
-| **PostgreSQL** | localhost:5432 |
-| **Redis** | localhost:6379 |
-
-При первом запуске API применяет миграции и создаёт seed-данные: 20 скинов, роли (Admin, User), пользователей **TestUser** / **Admin** / **TestUser2** (пароли: `Password123!` / `Admin123!` / `TestUser123!`).
-
-Для создания миграции локально в appsettings.json заполните поля
-"ConnectionStrings": {
-    "DefaultConnection": "Host=localhost;Database=MinecraftSkinsDb;Username=postgres;Password=ваш пароль"
-  },
-  и
-  "Redis": {
-    "Configuration": "localhost:6379,password=ваш пароль для redis"
-  },
-  После применения миграции рекомендуется убрать эти данные из appsettings.json и оставить строки пустыми.
-
----
-
-## Миграции
-
-- **При запуске API** миграции применяются автоматически (`db.Database.Migrate()` в `Program.cs`).
-- **Вручную** (из корня решения):
-  ```bash
-  Update-Database -Project MinecraftSkins.Infrastructure -StartupProject MinecraftSkins.Api -Context AppDbContext
-  ```
-- **Добавить новую миграцию:**
-  ```bash
-  Add-Migration имяМиграции -Project MinecraftSkins.Infrastructure -OutputDir "Data/Migrations" -StartupProject MinecraftSkins.Api -Context AppDbContext
-  ```
-
-В проекте одна начальная миграция `Initial`: схема (Users, Roles, UserRoles, Skins, Purchases), роли и 20 скинов в seed. Пользователи (TestUser, Admin, TestUser2) создаются при старте через `DataSeeder` (пароли хешируются через ASP.NET Core Identity).
-
----
-
-## Формула расчёта цены
-
-Финальная цена скина в USD считается в отдельном компоненте **`IPriceCalculator`** (реализации: `StandardPriceCalculator`, `PromoPriceCalculator`), чтобы формулу можно было менять без контроллеров.
+Цена вынесена в отдельный компонент `IPriceCalculator`, чтобы формулу можно было тестировать и заменять без изменений API-слоя.
 
 **Используемая формула (Standard):**
 
@@ -109,8 +94,8 @@ docker-compose up --build
    (`btcPriceAtRelease` задаётся в конфиге, по умолчанию 68 000 USD).
 
 2. **Ограничение волатильности (clamping):**  
-   `clampedFactor = Math.Max(MinPriceMultiplier, Math.Min(MaxPriceMultiplier, btcGrowthFactor))` 
-   где MinPriceMultiplier = 0.5m и MaxPriceMultiplier = 3.0m 
+   `clampedFactor = Math.Max(MinPriceMultiplier, Math.Min(MaxPriceMultiplier, btcGrowthFactor))`
+   где MinPriceMultiplier = 0.5m и MaxPriceMultiplier = 3.0m
    — цена не опускается ниже 50% и не поднимается выше 300% от базы.
 
 3. **Базовая цена и комиссия:**  
@@ -125,86 +110,212 @@ docker-compose up --build
 
 Формула детерминирована, устойчива к крайним значениям (лимиты 0.5–3.0, проверка на нулевой курс). Стратегия расчёта (Standard/Promo) переключается конфигом и DI (в коде закомментирован пример выбора Promo).
 
----
+### 3) Покупка
 
-## API (endpoints)
+При покупке:
+- проверяется существование и доступность скина;
+- запрашивается курс BTC/USD;
+- рассчитывается финальная цена;
+- создается `Purchase`, где фиксируются `PriceUsdFinal` и `BtcUsdRate`.
+
+Дополнительно:
+- защита от повторов через `Idempotency-Key` на `POST /api/purchases`;
+- защита целостности через optimistic concurrency и уникальные индексы.
+
+## API
+
+Полный интерактивный контракт доступен в Swagger: `https://localhost:8081/swagger`.
 
 ### Skins
 
-| Метод | Путь | Описание |
-|-------|------|----------|
-| GET | `/api/skins` | Список скинов. Параметры: `availableOnly`, `search`, `skip`, `take`. В ответе — базовые поля и рассчитанная финальная цена (и курс при доступности). |
-| GET | `/api/skins/{id}` | Детали скина и финальная цена. |
-| POST | `/api/skins` | Создать скин (Name, BasePriceUsd, IsAvailable). **Требуется роль Admin.** |
-| PUT | `/api/skins/{id}` | Обновить скин. **Требуется роль Admin.** |
-| DELETE | `/api/skins/{id}` | Удаление (soft delete). **Требуется роль Admin.** |
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/skins` | Каталог с фильтрами `availableOnly`, `search`, `skip/take` (или пагинация), с расчетной ценой |
+| GET | `/api/skins/{id}` | Детали скина + финальная цена |
+| POST | `/api/skins` | Создание скина (`Admin`) |
+| PUT | `/api/skins/{id}` | Обновление скина (`Admin`) |
+| DELETE | `/api/skins/{id}` | Удаление (soft delete, `Admin`) |
 
 ### Rates
 
-| Метод | Путь | Описание |
-|-------|------|----------|
-| GET | `/api/rates/btc-usd` | Текущий курс BTC/USD, метаданные: `rate`, `asOfUtc`, `source` (Cache/External/Fallback), `ageSeconds`. **Требуется роль Admin.** При недоступности внешнего API и отсутствии fallback — 503. |
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/rates/btc-usd` | Текущий курс: `rate`, `asOfUtc`, `source` (`Cache/External/Fallback`), `ageSeconds` |
 
 ### Purchases
 
-| Метод | Путь | Описание |
-|-------|------|----------|
-| POST | `/api/purchases` | Покупка скина. Тело: `{ "skinId": "guid" }`. Авторизация по JWT (BuyerId из токена). Поддерживается идемпотентность: заголовок `Idempotency-Key`. Ответ: созданный чек (id, skinId, finalPrice, rate, purchasedAt). 201 / 400 / 404 / 409 / 503. |
-| GET | `/api/purchases` | Список чеков. Параметры: `buyerId`, `skinId`, `from`, `to`, `skip`, `take`. Для текущего пользователя можно не передавать `buyerId`. **Требуется авторизация.** |
-| GET | `/api/purchases/{id}` | Чек по id. **Требуется авторизация.** |
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/purchases` | Покупка скина. Body: `{ "skinId": "guid" }`, заголовок `Idempotency-Key` |
+| GET | `/api/purchases` | Список покупок с фильтрами (`mineOnly/skinId/from/to/skip/take`) |
+| GET | `/api/purchases/{id}` | Детали покупки |
 
 ### Auth
 
-| Метод | Путь | Описание |
-|-------|------|----------|
-| POST | `/api/login` | Вход: `{ "userName", "password" }` → JWT. |
-| POST | `/api/register` | Регистрация. |
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/api/register` | Регистрация |
+| POST | `/api/login` | Логин, возврат JWT |
 
 ### Health
 
-| Метод | Путь | Описание |
-|-------|------|----------|
-| GET | `/health` | Health checks: БД, провайдер курса BTC, Redis. |
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/health` | Health checks: БД, Redis, внешний провайдер курса |
 
----
+## Обработка ошибок
 
-## Формат ошибок
-
-Используется **ProblemDetails** (RFC 7807):
-
-- Валидация (FluentValidation) → **400** с деталями в `errors`.
-- Не найден ресурс → **404**.
-- Скин недоступен для покупки / конфликт при конкурентном обновлении → **409**.
-- Внешний курс недоступен и нет fallback → **503**.
-- В ответе также передаётся `traceId` для корреляции.
-
----
-
-## Архитектура
-
-Слои разделены по проектам и ответственности; контроллеры (endpoints) тонкие, без прямой работы с DbContext и без бизнес-логики.
-
-| Проект | Назначение |
-|--------|------------|
-| **MinecraftSkins.Api** | Точка входа: Minimal API (MapGroup), middleware, Swagger, composition root (DI), глобальная обработка ошибок (ProblemDetails), фильтры (идемпотентность), health checks. |
-| **MinecraftSkins.Application** | Use-cases: сервисы (SkinService, PurchaseService, BtcRateService), интерфейсы репозиториев и внешних клиентов (IBtcRateService), **расчёт цены** (IPriceCalculator, Standard/Promo), DTO, FluentValidation, опции (PriceCalculator, BtcRateProvider). Вся бизнес-логика покупки и расчёта цены — здесь. |
-| **MinecraftSkins.Domain** | Сущности (Skin, Purchase), модели (BtcRateResult), интерфейсы репозиториев и провайдеров (IBtcRateProvider), доменные контракты. |
-| **MinecraftSkins.Infrastructure** | EF Core DbContext, миграции, реализации репозиториев, **HTTP-клиенты внешних API** (CoinGecko, Binance — через HttpClientFactory, типизированные клиенты), кэш (IMemoryCache + Redis в BtcRateService), seed скинов и ролей, DataSeeder пользователей. |
-
-**Ключевые решения:**
-
-- **Цена:** расчёт вынесен в `IPriceCalculator` (Application), тестируемо и заменяемо; две стратегии (Standard/Promo) через конфиг/DI.
-- **Курс BTC:** интерфейс `IBtcRateProvider` (Domain), реализации в Infrastructure; слой Application — `IBtcRateService` с кэшем (Memory + Redis), fallback на последнее успешное значение (до 10 минут), иначе 503.
-- **Покупка:** проверка существования/доступности скина, получение курса, расчёт цены, создание Purchase — в Application; оптимистичная конкуренция (RowVersion на Skin), при конфликте — повторное чтение и при необходимости 409.
-- **Идемпотентность:** заголовок `Idempotency-Key` на POST `/api/purchases`, хранение результата в Redis.
-- **Авторизация:** JWT; BuyerId берётся из токена. Роли Admin (управление скинами, endpoint курса) и User.
-
-**EF Core:** DbContext и миграции в Infrastructure; AsNoTracking для каталогов, пагинация и фильтрация в репозиториях, soft delete через query filter на Skin, RowVersion для оптимистичной конкуренции.
-
----
+Используется RFC 7807 ProblemDetails (`GlobalExceptionHandler`):
+- `400` -> валидация и некорректные входные данные;
+- `404` -> ресурс не найден;
+- `409` -> конфликт бизнес-операции (например повторная покупка/недоступный ресурс);
+- `503` -> внешний курс недоступен и fallback невозможен;
+- `500` -> непредвиденная ошибка.
 
 ## Конфигурация
 
-- **appsettings.json** — строка подключения к БД, Redis, JWT Secret, CORS, провайдер курса (`BtcRateProvider:Provider`: CoinGecko/Binance), опции калькулятора цены.
-- **Переменные окружения** переопределяют настройки (в т.ч. в Docker: `ConnectionStrings__DefaultConnection`, `Redis__Configuration`, `ApiSettings__Secret` и т.д.).
-- **.env** в корне используется для docker-compose (DB_*, REDIS_*, JWT_SECRET, VITE_API_BASE_URL). Для локального запуска бэкенда можно использовать свой appsettings или переменные окружения.
+Ключевые настройки backend:
+- `ConnectionStrings:DefaultConnection`
+- `Redis:Configuration`
+- `ApiSettings:Secret`
+- `BtcRateProvider:Provider` (`CoinGecko` / `Binance`)
+- `PriceCalculator:*`
+- `Cors:AllowedOrigins`
+- `OpenTelemetry:Metrics:Enabled`
+
+Все параметры можно задать через:
+- `MinecraftSkins.Api/appsettings.json`,
+- environment variables (для Docker/CI).
+
+## Запуск
+
+### Docker Compose
+
+В корне репозитория создайте файл **`.env`** (можно скопировать из примера ниже), задайте пароли и секреты.
+
+
+**Пример .env:**
+
+
+```env
+# Database Configuration
+DB_HOST=localhost
+DB_NAME=MinecraftSkinsDb
+DB_USER=postgres
+DB_PASSWORD=ваш_пароль
+
+
+# Redis Configuration
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=ваш пароль для redis
+
+
+# JWT Secret
+JWT_SECRET=ваш_длинный_секрет_для_подписи_токенов
+
+
+как пример можно взять:
+K4t5N6R7u8V9wXyZaBcDeFgHiJkLmNoPqRsTuVwXyZaBcDeFgHiJkLmNoPqRsT
+или
+5f3c9a1b2d4e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1
+
+
+#Vite + React
+VITE_API_BASE_URL=https://localhost:8081/api
+```
+
+
+**Запуск:**
+
+
+```bash
+docker-compose up --build
+```
+
+3) Доступные сервисы:
+
+| Service | URL |
+|---|---|
+| Frontend | `http://localhost:3001` |
+| API HTTP | `http://localhost:8080` |
+| API HTTPS | `https://localhost:8081` |
+| Swagger | `http://localhost:8080/swagger` |
+| Prometheus | `http://localhost:9090` |
+| Grafana | `http://localhost:3000` |
+| PostgreSQL | `localhost:5432` |
+| Redis | `localhost:6379` |
+
+Grafana credentials by default:
+- login: `admin`
+- password: `admin`
+
+
+
+## Миграции и сидирование
+
+При первом запуске API применяет миграции и создаёт seed-данные: 20 скинов, роли (Admin, User), пользователей **TestUser** / **Admin** / **TestUser2** (пароли: `Password123!` / `Admin123!` / `TestUser123!`).
+
+
+Для создания миграции локально в appsettings.json заполните поля
+"ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Database=MinecraftSkinsDb;Username=postgres;Password=ваш пароль"
+  },
+  и
+  "Redis": {
+    "Configuration": "localhost:6379,password=ваш пароль для redis"
+  },
+  После применения миграции рекомендуется убрать эти данные из appsettings.json и оставить строки пустыми(из env подтянутся).
+
+
+## Observability (OpenTelemetry/Prometheus/Grafana)
+
+### Что включено
+
+- OpenTelemetry metrics pipeline в `Program.cs`:
+  - `AddAspNetCoreInstrumentation()`
+  - `AddHttpClientInstrumentation()`
+  - `AddRuntimeInstrumentation()`
+  - `AddPrometheusExporter()`
+- endpoint метрик: `/metrics`
+- Prometheus scrape настроен на `api:8080/metrics`
+- Grafana datasource (`grafana/datasource.yml`)
+
+### Быстрая проверка
+
+1) Открыть `http://localhost:9090/targets`, убедиться что `minecraftskins-api` в статусе `UP`.
+2) Открыть `http://localhost:8080/metrics`, убедиться что метрики отдаются.
+3) В Grafana (`http://localhost:3000`) выполнить в Explore запрос:
+
+```promql
+up
+```
+
+## Тесты
+
+Тестовый проект: `MinecraftSkins.Tests`.
+
+- 100 тест-методов (`[Fact]`/`[Theory]`);
+- 105 исполняемых тест-кейсов;
+- line coverage: 86.25%;
+- branch coverage: 57.18%.
+
+Покрыты:
+- unit-тесты сервисов, валидаторов, API контрактов, idempotency, exception mapping;
+- integration-тесты endpoint-ов и репозиториев (включая PostgreSQL через Testcontainers);
+- архитектурные тесты на границы слоев.
+
+Запуск тестов:
+
+```bash
+dotnet test (здесь путь до проекта)MinecraftSkins\MinecraftSkins.Tests\MinecraftSkins.Tests.csproj" --no-restore -v minimal
+```
+
+## Frontend кратко
+
+`minecraftskins.front` реализует:
+- каталог скинов;
+- покупку с `Idempotency-Key`;
+- страницу покупок;
+- admin-страницы для курса и управления скинами;
+- role-based guards (`RequireAuth`, `RequireAdmin`).

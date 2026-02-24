@@ -47,10 +47,40 @@ services:
         # URL API с точки зрения браузера (хост пользователя). Для доступа с хоста: http://localhost:8080/api
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080/api}
     ports:
-      - "3000:80"
+      - "3001:80"
     depends_on:
       - api
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: minecraftskins_prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - promdata:/prometheus
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: minecraftskins_grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+    depends_on:
+      - prometheus
 
 volumes:
   pgdata:
   redisdata:
+  promdata:
+  grafanadata:
