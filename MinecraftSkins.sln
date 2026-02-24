@@ -16,6 +16,11 @@ EndProject
 Project("{54A90642-561A-4BB1-A94E-469ADEE60C69}") = "minecraftskins.front", "MinecraftSkins.front\minecraftskins.front.esproj", "{04C5D7E9-E1FB-3D57-1C66-1B80CD681716}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MinecraftSkins.Tests", "MinecraftSkins.Tests\MinecraftSkins.Tests.csproj", "{E8DADB04-D200-4EFB-8570-20E53983FAB7}"
+	ProjectSection(ProjectDependencies) = postProject
+		{3383A5AF-6DDF-4B61-A843-18CCB1C6E4FF} = {3383A5AF-6DDF-4B61-A843-18CCB1C6E4FF}
+		{A3E02FD7-96F6-4181-A9F7-3304AAF9E3FE} = {A3E02FD7-96F6-4181-A9F7-3304AAF9E3FE}
+		{CD0A0749-6792-4CD5-8337-B8B7F779C3BB} = {CD0A0749-6792-4CD5-8337-B8B7F779C3BB}
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

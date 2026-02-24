@@ -19,7 +19,7 @@ public class BtcRateService : IBtcRateService
     private readonly ILogger<BtcRateService> _logger;
 
     private const string CacheKey = "btc_usd_rate";
-    private static BtcRateResult? _lastSuccessfulRate; // Fallback in memory
+    private const string FallbackCacheKey = "btc_usd_rate_last_successful";
     private static readonly TimeSpan MemoryCacheTtl = TimeSpan.FromSeconds(20); // L1 cache TTL
     private static readonly TimeSpan RedisCacheTtl = TimeSpan.FromSeconds(60); // L2 cache TTL — не более 1 минуты для актуального курса
     private static readonly TimeSpan FallbackTtl = TimeSpan.FromMinutes(10);
@@ -38,7 +38,7 @@ public class BtcRateService : IBtcRateService
 
     public async Task<BtcRateResult> GetBtcUsdRateAsync(CancellationToken cancellationToken = default)
     {
-        // 1. L1 Cache (Memory) - fastest, expires after 60 seconds
+        // 1. L1 Cache (Memory) - fastest, short TTL (20 seconds)
         if (_memoryCache.TryGetValue(CacheKey, out BtcRateResult? cachedRate) && cachedRate != null)
         {
             cachedRate.Source = "Cache (Memory)";
@@ -83,16 +83,17 @@ public class BtcRateService : IBtcRateService
             _logger.LogError(ex, "External provider failed. Attempting fallback.");
 
             // 4. Fallback to cached value
-            if (_lastSuccessfulRate != null)
+            if (_memoryCache.TryGetValue(FallbackCacheKey, out BtcRateResult? lastSuccessfulRate) &&
+                lastSuccessfulRate != null)
             {
-                var age = DateTime.UtcNow - _lastSuccessfulRate.AsOfUtc;
+                var age = DateTime.UtcNow - lastSuccessfulRate.AsOfUtc;
                 if (age <= FallbackTtl)
                 {
                     _logger.LogWarning("Using fallback rate. Age: {Age}", age);
                     return new BtcRateResult
                     {
-                        Rate = _lastSuccessfulRate.Rate,
-                        AsOfUtc = _lastSuccessfulRate.AsOfUtc,
+                        Rate = lastSuccessfulRate.Rate,
+                        AsOfUtc = lastSuccessfulRate.AsOfUtc,
                         Source = "Fallback",
                         AgeSeconds = (int)age.TotalSeconds
                     };
@@ -111,7 +112,7 @@ public class BtcRateService : IBtcRateService
     {
         // Success - update caches
         _memoryCache.Set(CacheKey, freshRate, MemoryCacheTtl);
-        _lastSuccessfulRate = freshRate;
+        _memoryCache.Set(FallbackCacheKey, freshRate, FallbackTtl);
         
         // Обновляем Redis с TTL 1 минута
         try
