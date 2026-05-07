@@ -1,13 +1,14 @@
 import { apiGet, apiPost } from 'shared/api';
 
 /**
- * @param {{ buyerId?: string; skinId?: string; from?: string; to?: string; skip?: number; take?: number }} [params]
+ * @param {{ buyerId?: string; buyerUserName?: string; skinId?: string; from?: string; to?: string; skip?: number; take?: number }} [params]
  * @param {{ token: string }} options - token required
  * @returns {Promise<import('../model/types').Purchase[]>}
  */
 export async function getPurchases(params = {}, options = {}) {
   const q = new URLSearchParams();
   if (params.buyerId) q.set('buyerId', params.buyerId);
+  if (params.buyerUserName) q.set('buyerUserName', params.buyerUserName);
   if (params.skinId) q.set('skinId', params.skinId);
   if (params.from) q.set('from', params.from);
   if (params.to) q.set('to', params.to);

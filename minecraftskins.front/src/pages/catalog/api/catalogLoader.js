@@ -9,10 +9,14 @@ import { getSkins } from 'entities/skin';
 export async function loadCatalog(params = {}) {
   const availableOnly = params.availableOnly ?? true;
   const search = params.search;
+  const sortBy = params.sortBy ?? 'Date';
+  const sortOrder = params.sortOrder ?? 'Desc';
   return getSkins({
     availableOnly,
     search,
+    sortBy,
+    sortOrder,
     skip: 0,
-    take: 2000,
+    take: 100,
   });
 }

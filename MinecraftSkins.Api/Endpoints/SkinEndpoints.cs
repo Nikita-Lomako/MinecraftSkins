@@ -1,7 +1,9 @@
 using System.Threading;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using MinecraftSkins.Application.Dtos;
 using MinecraftSkins.Application.Services;
+using MinecraftSkins.Infrastructure.Services;
 
 namespace MinecraftSkins.Api.Endpoints;
 
@@ -44,13 +46,19 @@ public static class SkinEndpoints
 
     private static async Task<IResult> GetAllSkins(
         [FromServices] ISkinService skinService,
+        [FromServices] IQueryHistoryService queryHistoryService,
+        [FromServices] IHttpContextAccessor contextAccessor,
         [FromQuery] bool? availableOnly,
         [FromQuery] string? search,
+        [FromQuery] string? sortBy,
+        [FromQuery] string? sortOrder,
         [FromQuery] int skip = 0,
         [FromQuery] int take = 10,
         CancellationToken cancellationToken = default)
     {
         var skins = await skinService.GetAllSkinsAsync(availableOnly, search, skip, take, cancellationToken);
+        var userId = contextAccessor.HttpContext?.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        await queryHistoryService.LogSearchAsync(userId, search ?? string.Empty, skins.Count, cancellationToken);
         return Results.Ok(skins);
     }
 

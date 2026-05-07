@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using MinecraftSkins.Domain.Interfaces;
 using MinecraftSkins.Domain.Models;
-using MinecraftSkins.Infrastructure.Data.Extensions;
 
 namespace MinecraftSkins.Infrastructure.Data;
 
@@ -15,6 +14,9 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
 
     public DbSet<Skin> Skins { get; set; }
     public DbSet<Purchase> Purchases { get; set; }
+    public DbSet<Cart> Carts { get; set; }
+    public DbSet<CartItem> CartItems { get; set; }
+    public DbSet<SearchQueryHistory> SearchQueryHistories { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -69,6 +71,54 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
             // Unique constraint: each user can buy each skin only once
             entity.HasIndex(p => new { p.BuyerId, p.SkinId })
                   .IsUnique();
+
+            entity.HasOne<IdentityUser>()
+                .WithMany()
+                .HasForeignKey(p => p.BuyerId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Cart>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.BuyerId).IsRequired();
+
+            entity.HasIndex(c => c.BuyerId).IsUnique();
+            entity.HasOne<IdentityUser>()
+                .WithMany()
+                .HasForeignKey(c => c.BuyerId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CartItem>(entity =>
+        {
+            entity.HasKey(ci => ci.Id);
+            entity.Property(ci => ci.Quantity).IsRequired();
+            entity.Property(ci => ci.UnitPriceUsd).HasPrecision(18, 2);
+
+            entity.ToTable(t => t.HasCheckConstraint("CK_CartItems_Quantity", "\"Quantity\" > 0"));
+            entity.HasIndex(ci => new { ci.CartId, ci.SkinId }).IsUnique();
+
+            entity.HasOne(ci => ci.Cart)
+                .WithMany(c => c.Items)
+                .HasForeignKey(ci => ci.CartId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(ci => ci.Skin)
+                .WithMany()
+                .HasForeignKey(ci => ci.SkinId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SearchQueryHistory>(entity =>
+        {
+            entity.HasKey(h => h.Id);
+            entity.Property(h => h.QueryText).HasMaxLength(256).IsRequired();
+            entity.Property(h => h.Endpoint).HasMaxLength(64).IsRequired();
+            entity.Property(h => h.CreatedAtUtc).IsRequired();
+
+            entity.HasIndex(h => h.CreatedAtUtc);
+            entity.HasIndex(h => h.UserId);
         });
 
         // Seed Roles
@@ -80,7 +130,6 @@ public class AppDbContext : IdentityDbContext<IdentityUser>
             new IdentityRole { Id = userRoleId, Name = "User", NormalizedName = "USER" }
         );       
 
-        modelBuilder.Seed();
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)

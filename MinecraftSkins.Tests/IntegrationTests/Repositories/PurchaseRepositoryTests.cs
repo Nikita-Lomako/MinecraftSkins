@@ -83,7 +83,7 @@ public class PurchaseRepositoryTests : IntegrationTestBase
         await _repository.CreateAsync(purchase3, ct);
 
         // Act
-        var result = await _repository.GetAllAsync("buyer-1", null, null, null, 0, 10, ct);
+        var result = await _repository.GetAllAsync("buyer-1", null, null, null, null, 0, 10, ct);
 
         // Assert
         result.Count.Should().Be(2);

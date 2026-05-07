@@ -62,7 +62,7 @@ public class PurchaseService : IPurchaseService
         }
 
         // Проверка: пользователь может купить каждый скин только один раз
-        var existingPurchases = await _purchaseRepository.GetAllAsync(buyerId, skinId, null, null, 0, 1, cancellationToken);
+        var existingPurchases = await _purchaseRepository.GetAllAsync(buyerId, null, skinId, null, null, 0, 1, cancellationToken);
         if (existingPurchases.Any())
         {
             _logger.LogWarning("User {BuyerId} already purchased skin {SkinId}", buyerId, skinId);
@@ -136,14 +136,14 @@ public class PurchaseService : IPurchaseService
         return purchaseDto;
     }
 
-    public async Task<List<PurchaseDto>> GetPurchasesAsync(string? buyerId, Guid? skinId, DateTime? from, DateTime? to, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<List<PurchaseDto>> GetPurchasesAsync(string? buyerId, string? buyerUserName, Guid? skinId, DateTime? from, DateTime? to, int skip, int take, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Getting purchases with buyerId={BuyerId}, skinId={SkinId}, from={From}, to={To}, skip={Skip}, take={Take}",
-            buyerId, skinId, from, to, skip, take);
+        _logger.LogInformation("Getting purchases with buyerId={BuyerId}, buyerUserName={BuyerUserName}, skinId={SkinId}, from={From}, to={To}, skip={Skip}, take={Take}",
+            buyerId, buyerUserName, skinId, from, to, skip, take);
 
         cancellationToken.ThrowIfCancellationRequested();
 
-        var purchases = await _purchaseRepository.GetAllAsync(buyerId, skinId, from, to, skip, take, cancellationToken);
+        var purchases = await _purchaseRepository.GetAllAsync(buyerId, buyerUserName, skinId, from, to, skip, take, cancellationToken);
         var purchaseDtos = _mapper.Map<List<PurchaseDto>>(purchases);
 
         // Загружаем информацию о скинах отдельными запросами (включая soft-deleted)
@@ -181,6 +181,7 @@ public class PurchaseService : IPurchaseService
             {
                 purchaseDto.Skin = skinDto;
             }
+
         }
 
         _logger.LogInformation("Retrieved {Count} purchases", purchaseDtos.Count);
@@ -208,7 +209,6 @@ public class PurchaseService : IPurchaseService
         {
             purchaseDto.Skin = _mapper.Map<SkinPurchaseDto>(skin);
         }
-
         _logger.LogInformation("Found purchase with id {Id}", id);
         return purchaseDto;
     }

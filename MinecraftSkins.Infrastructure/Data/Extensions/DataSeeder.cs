@@ -1,5 +1,9 @@
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using MinecraftSkins.Domain.Models;
+using MinecraftSkins.Infrastructure.Data;
+using System.Text.Json;
 
 namespace MinecraftSkins.Infrastructure.Data.Extensions;
 
@@ -10,6 +14,80 @@ namespace MinecraftSkins.Infrastructure.Data.Extensions;
 /// </summary>
 public static class DataSeeder
 {
+    public static async Task EnsureSeedSkinsAsync(
+    DbContext dbContext,
+    ILogger? logger = null,
+    CancellationToken cancellationToken = default)
+    {
+        if (dbContext is not AppDbContext appDbContext)
+        {
+            return;
+        }
+
+        if (await appDbContext.Skins.IgnoreQueryFilters().AnyAsync(cancellationToken))
+        {
+            return;
+        }
+
+        var seedPath = Path.Combine(AppContext.BaseDirectory, "Data", "Seed", "skins.seed.json");
+
+        // Добавь fallback путь для Docker/разных окружений
+        if (!File.Exists(seedPath))
+        {
+            seedPath = Path.Combine(Directory.GetCurrentDirectory(), "Data", "Seed", "skins.seed.json");
+        }
+
+        if (!File.Exists(seedPath))
+        {
+            logger?.LogWarning("Skins seed file not found: {SeedPath}", seedPath);
+            return;
+        }
+
+        var json = await File.ReadAllTextAsync(seedPath, cancellationToken);
+
+        // ✅ Добавь JsonSerializerOptions с PropertyNameCaseInsensitive
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        var seedRows = JsonSerializer.Deserialize<List<SkinSeedModel>>(json, options) ?? new List<SkinSeedModel>();
+
+        if (seedRows.Count == 0)
+        {
+            logger?.LogWarning("No skins in seed file");
+            return;
+        }
+
+        // Добавь логирование для отладки
+        logger?.LogInformation("Loaded {Count} skins from seed file. First skin ID: {FirstId}",
+            seedRows.Count, seedRows.FirstOrDefault()?.Id);
+
+        var skins = seedRows.Select(s => {
+            try
+            {
+                return new Skin
+                {
+                    Id = Guid.Parse(s.Id),
+                    Name = s.Name,
+                    BasePriceUsd = s.PriceUsd,
+                    IsAvailable = s.IsAvailable,
+                    CreatedAtUtc = DateTime.SpecifyKind(s.CreatedAtUtc, DateTimeKind.Utc),
+                    IsDeleted = false
+                };
+            }
+            catch (Exception ex)
+            {
+                logger?.LogError(ex, "Failed to parse skin seed row: Id={Id}, Name={Name}", s.Id, s.Name);
+                throw;
+            }
+        }).ToList();
+
+        await appDbContext.Skins.AddRangeAsync(skins, cancellationToken);
+        await appDbContext.SaveChangesAsync(cancellationToken);
+        logger?.LogInformation("Seeded {Count} skins from JSON", skins.Count);
+    }
+
     public static async Task EnsureSeedUsersAsync(
         UserManager<IdentityUser> userManager,
         RoleManager<IdentityRole> roleManager,
@@ -55,5 +133,23 @@ public static class DataSeeder
                 logger?.LogWarning("Role {Role} not found, user {UserName} created without role", roleName, userName);
             }
         }
+    }
+
+    private sealed class SkinSeedModel
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("id")]
+        public string Id { get; set; } = string.Empty;
+
+        [System.Text.Json.Serialization.JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [System.Text.Json.Serialization.JsonPropertyName("priceUsd")]
+        public decimal PriceUsd { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("isAvailable")]
+        public bool IsAvailable { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("createdAtUtc")]
+        public DateTime CreatedAtUtc { get; set; }
     }
 }

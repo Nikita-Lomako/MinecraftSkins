@@ -5,9 +5,10 @@ import { RequireAdmin } from '../ui/RequireAdmin';
 import { CatalogPage } from 'pages/catalog';
 import { SkinDetailPage } from 'pages/skin-detail';
 import { PurchasesPage } from 'pages/purchases';
+import { CartPage } from 'pages/cart';
 import { SignInPage } from 'pages/sign-in';
 import { RegisterPage } from 'pages/register';
-import { AdminPage, AdminRatePage, AdminSkinsPage } from 'pages/admin';
+import { AdminPage, AdminRatePage, AdminSkinsPage, AdminPurchasesPage } from 'pages/admin';
 
 const router = createBrowserRouter([
   {
@@ -15,6 +16,14 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <CatalogPage /> },
       { path: 'skins/:id', element: <SkinDetailPage /> },
+      {
+        path: 'cart',
+        element: (
+          <RequireAuth>
+            <CartPage />
+          </RequireAuth>
+        ),
+      },
       {
         path: 'purchases',
         element: (
@@ -49,6 +58,16 @@ const router = createBrowserRouter([
           <RequireAuth>
             <RequireAdmin>
               <AdminSkinsPage />
+            </RequireAdmin>
+          </RequireAuth>
+        ),
+      },
+      {
+        path: 'admin/purchases',
+        element: (
+          <RequireAuth>
+            <RequireAdmin>
+              <AdminPurchasesPage />
             </RequireAdmin>
           </RequireAuth>
         ),

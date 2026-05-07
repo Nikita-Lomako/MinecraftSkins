@@ -26,6 +26,16 @@ export function AdminPage() {
             </CardBody>
           </Card>
         </div>
+        <div className="col-md-6 mb-3">
+          <Card>
+            <CardBody>
+              <CardTitle>
+                <Link to="/admin/purchases">Purchases</Link>
+              </CardTitle>
+              <p className="mb-0 small text-muted">История покупок с фильтрами по пользователю и дате.</p>
+            </CardBody>
+          </Card>
+        </div>
       </div>
     </Container>
   );

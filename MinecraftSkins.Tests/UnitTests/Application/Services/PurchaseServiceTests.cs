@@ -64,7 +64,7 @@ public class PurchaseServiceTests
 
         _skinRepository.GetByIdAsync(skinId, Arg.Any<CancellationToken>())
             .Returns(skin);
-        _purchaseRepository.GetAllAsync(buyerId, skinId, null, null, 0, 1, Arg.Any<CancellationToken>())
+        _purchaseRepository.GetAllAsync(buyerId, null, skinId, null, null, 0, 1, Arg.Any<CancellationToken>())
             .Returns(new List<Purchase>());
         _btcRateService.GetBtcUsdRateAsync(Arg.Any<CancellationToken>())
             .Returns(btcRate);
@@ -133,7 +133,7 @@ public class PurchaseServiceTests
 
         _skinRepository.GetByIdAsync(skinId, Arg.Any<CancellationToken>())
             .Returns(skin);
-        _purchaseRepository.GetAllAsync(buyerId, skinId, null, null, 0, 1, Arg.Any<CancellationToken>())
+        _purchaseRepository.GetAllAsync(buyerId, null, skinId, null, null, 0, 1, Arg.Any<CancellationToken>())
             .Returns(new List<Purchase> { existingPurchase });
 
         // Act & Assert
@@ -155,11 +155,11 @@ public class PurchaseServiceTests
         purchases[0].BuyerId = buyerId;
         purchases[0].SkinId = skinId;
 
-        _purchaseRepository.GetAllAsync(buyerId, skinId, null, null, 0, 10, Arg.Any<CancellationToken>())
+        _purchaseRepository.GetAllAsync(buyerId, null, skinId, null, null, 0, 10, Arg.Any<CancellationToken>())
             .Returns(purchases.Where(p => p.BuyerId == buyerId && p.SkinId == skinId).ToList());
 
         // Act
-        var result = await _service.GetPurchasesAsync(buyerId, skinId, null, null, 0, 10, ct);
+        var result = await _service.GetPurchasesAsync(buyerId, null, skinId, null, null, 0, 10, ct);
 
         // Assert
         result.Should().NotBeNull();
@@ -217,7 +217,7 @@ public class PurchaseServiceTests
 
         _skinRepository.GetByIdAsync(skinId, Arg.Any<CancellationToken>())
             .Returns(skin);
-        _purchaseRepository.GetAllAsync(buyerId, skinId, null, null, 0, 1, Arg.Any<CancellationToken>())
+        _purchaseRepository.GetAllAsync(buyerId, null, skinId, null, null, 0, 1, Arg.Any<CancellationToken>())
             .Returns(new List<Purchase>());
         _btcRateService.GetBtcUsdRateAsync(Arg.Any<CancellationToken>())
             .Returns(btcRate);

@@ -18,11 +18,11 @@ public class PurchaseRepository : IPurchaseRepository
         _logger = logger;
     }
 
-    public async Task<ICollection<Purchase>> GetAllAsync(string? buyerId, Guid? skinId, DateTime? from, DateTime? to, int skip, int take, CancellationToken cancellationToken = default)
+    public async Task<ICollection<Purchase>> GetAllAsync(string? buyerId, string? buyerUserName, Guid? skinId, DateTime? from, DateTime? to, int skip, int take, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        _logger.LogDebug("Getting purchases with buyerId={BuyerId}, skinId={SkinId}, from={From}, to={To}, skip={Skip}, take={Take}",
-            buyerId, skinId, from, to, skip, take);
+        _logger.LogDebug("Getting purchases with buyerId={BuyerId}, buyerUserName={BuyerUserName}, skinId={SkinId}, from={From}, to={To}, skip={Skip}, take={Take}",
+            buyerId, buyerUserName, skinId, from, to, skip, take);
 
         var query = _db.Purchases
             .AsNoTracking()
@@ -32,6 +32,16 @@ public class PurchaseRepository : IPurchaseRepository
         {
             query = query.Where(p => p.BuyerId == buyerId);
         }
+
+        if (!string.IsNullOrWhiteSpace(buyerUserName))
+        {
+            var normalized = buyerUserName.Trim().ToUpperInvariant();
+            query = query.Where(p => _db.Users.Any(u =>
+                u.Id == p.BuyerId &&
+                u.NormalizedUserName != null &&
+                u.NormalizedUserName.Contains(normalized)));
+        }
+
 
         if (skinId.HasValue)
         {

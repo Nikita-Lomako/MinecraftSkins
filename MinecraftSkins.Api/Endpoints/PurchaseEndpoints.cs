@@ -1,6 +1,7 @@
 using System.Threading;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using MinecraftSkins.Application.Dtos;
 using MinecraftSkins.Application.Services;
 
@@ -34,12 +35,11 @@ public static class PurchaseEndpoints
     }
 
     private static async Task<IResult> CreatePurchase(
-        [FromServices] IPurchaseService purchaseService,
-        [FromServices] IHttpContextAccessor httpContextAccessor,
-        [FromBody] PurchaseCreateDto dto,
-        CancellationToken cancellationToken = default)
+    [FromServices] IPurchaseService purchaseService,
+    [FromServices] IHttpContextAccessor httpContextAccessor,
+    [FromBody] PurchaseCreateDto dto,
+    CancellationToken cancellationToken = default)
     {
-        // Extract BuyerId from JWT claims
         var user = httpContextAccessor.HttpContext?.User;
         var buyerId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
@@ -48,14 +48,30 @@ public static class PurchaseEndpoints
             return Results.Unauthorized();
         }
 
-        var purchase = await purchaseService.PurchaseSkinAsync(dto.SkinId, buyerId, cancellationToken);
-        return Results.Created($"/api/purchases/{purchase.Id}", purchase);
+        try
+        {
+            var purchase = await purchaseService.PurchaseSkinAsync(dto.SkinId, buyerId, cancellationToken);
+            return Results.Created($"/api/purchases/{purchase.Id}", purchase);
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("already purchased"))
+        {
+            return Results.Conflict(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.BadRequest(ex.Message);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return Results.NotFound(ex.Message);
+        }
     }
 
     private static async Task<IResult> GetAllPurchases(
         [FromServices] IPurchaseService purchaseService,
         [FromServices] IHttpContextAccessor httpContextAccessor,
         [FromQuery] string? buyerId,
+        [FromQuery] string? buyerUserName,
         [FromQuery] Guid? skinId,
         [FromQuery] DateTime? from,
         [FromQuery] DateTime? to,
@@ -64,10 +80,20 @@ public static class PurchaseEndpoints
         CancellationToken cancellationToken = default)
     {
         var user = httpContextAccessor.HttpContext?.User;
-        var currentUserId = user?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        if (string.IsNullOrEmpty(buyerId) && !string.IsNullOrEmpty(currentUserId))
+        var currentUserId = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var isAdmin = user?.IsInRole("Admin") == true;
+
+        if (!isAdmin)
+        {
             buyerId = currentUserId;
-        var purchases = await purchaseService.GetPurchasesAsync(buyerId, skinId, from, to, skip, take, cancellationToken);
+            buyerUserName = null;
+        }
+        else if (string.IsNullOrWhiteSpace(buyerId) && !string.IsNullOrWhiteSpace(currentUserId))
+        {
+            buyerId ??= currentUserId;
+        }
+
+        var purchases = await purchaseService.GetPurchasesAsync(buyerId, buyerUserName, skinId, from, to, skip, take, cancellationToken);
         return Results.Ok(purchases);
     }
 

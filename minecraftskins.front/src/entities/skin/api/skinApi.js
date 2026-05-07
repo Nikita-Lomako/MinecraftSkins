@@ -1,7 +1,7 @@
 import { apiGet, apiPost, apiPut, apiDelete } from 'shared/api';
 
 /**
- * @param {{ availableOnly?: boolean; search?: string; skip?: number; take?: number }} [params]
+ * @param {{ availableOnly?: boolean; search?: string; sortBy?: string; sortOrder?: string; skip?: number; take?: number }} [params]
  * @param {{ token?: string }} [options]
  * @returns {Promise<import('../model/types').Skin[]>}
  */
@@ -9,6 +9,8 @@ export async function getSkins(params = {}, options = {}) {
   const q = new URLSearchParams();
   if (params.availableOnly != null) q.set('availableOnly', String(params.availableOnly));
   if (params.search) q.set('search', params.search);
+  if (params.sortBy) q.set('sortBy', params.sortBy);
+  if (params.sortOrder) q.set('sortOrder', params.sortOrder);
   if (params.skip != null) q.set('skip', String(params.skip));
   if (params.take != null) q.set('take', String(params.take));
   const query = q.toString();

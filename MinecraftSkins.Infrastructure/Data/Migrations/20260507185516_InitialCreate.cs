@@ -1,5 +1,6 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -8,7 +9,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace MinecraftSkins.Infrastructure.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class Initial : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -25,6 +26,23 @@ namespace MinecraftSkins.Infrastructure.Data.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Roles", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "SearchQueryHistories",
+                columns: table => new
+                {
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<string>(type: "text", nullable: true),
+                    QueryText = table.Column<string>(type: "character varying(256)", maxLength: 256, nullable: false),
+                    Endpoint = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    ResultCount = table.Column<int>(type: "integer", nullable: true),
+                    CreatedAtUtc = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_SearchQueryHistories", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -72,6 +90,24 @@ namespace MinecraftSkins.Infrastructure.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "Carts",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    BuyerId = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Carts", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Carts_Users_BuyerId",
+                        column: x => x.BuyerId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "Purchases",
                 columns: table => new
                 {
@@ -89,6 +125,12 @@ namespace MinecraftSkins.Infrastructure.Data.Migrations
                         name: "FK_Purchases_Skins_SkinId",
                         column: x => x.SkinId,
                         principalTable: "Skins",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_Purchases_Users_BuyerId",
+                        column: x => x.BuyerId,
+                        principalTable: "Users",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
@@ -117,6 +159,34 @@ namespace MinecraftSkins.Infrastructure.Data.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "CartItems",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "uuid", nullable: false),
+                    CartId = table.Column<Guid>(type: "uuid", nullable: false),
+                    SkinId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Quantity = table.Column<int>(type: "integer", nullable: false),
+                    UnitPriceUsd = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_CartItems", x => x.Id);
+                    table.CheckConstraint("CK_CartItems_Quantity", "\"Quantity\" > 0");
+                    table.ForeignKey(
+                        name: "FK_CartItems_Carts_CartId",
+                        column: x => x.CartId,
+                        principalTable: "Carts",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_CartItems_Skins_SkinId",
+                        column: x => x.SkinId,
+                        principalTable: "Skins",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
             migrationBuilder.InsertData(
                 table: "Roles",
                 columns: new[] { "Id", "ConcurrencyStamp", "Name", "NormalizedName" },
@@ -126,32 +196,28 @@ namespace MinecraftSkins.Infrastructure.Data.Migrations
                     { "user-role-id-seed", null, "User", "USER" }
                 });
 
-            migrationBuilder.InsertData(
-                table: "Skins",
-                columns: new[] { "Id", "BasePriceUsd", "CreatedAtUtc", "DeletedAtUtc", "IsAvailable", "IsDeleted", "Name", "UpdatedAtUtc" },
-                values: new object[,]
-                {
-                    { new Guid("11111111-1111-1111-1111-111111111111"), 5.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Steve", null },
-                    { new Guid("22222222-2222-2222-2222-222222222222"), 5.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Alex", null },
-                    { new Guid("33333333-3333-3333-3333-333333333333"), 10.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Creeper", null },
-                    { new Guid("44444444-4444-4444-4444-444444444444"), 12.50m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Enderman", null },
-                    { new Guid("55555555-5555-5555-5555-555555555555"), 3.50m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Zombie", null },
-                    { new Guid("66666666-6666-6666-6666-666666666666"), 4.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, false, false, "Skeleton", null },
-                    { new Guid("77777777-7777-7777-7777-777777777777"), 15.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Herobrine", null },
-                    { new Guid("88888888-8888-8888-8888-888888888888"), 2.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Pig", null },
-                    { new Guid("99999999-9999-9999-9999-999999999999"), 2.50m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Cow", null },
-                    { new Guid("a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1"), 4.50m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Villager", null },
-                    { new Guid("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), 2.25m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Sheep", null },
-                    { new Guid("b2b2b2b2-b2b2-b2b2-b2b2-b2b2b2b2b2b2"), 8.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Witch", null },
-                    { new Guid("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"), 1.75m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Chicken", null },
-                    { new Guid("c3c3c3c3-c3c3-c3c3-c3c3-c3c3c3c3c3c3"), 11.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Blaze", null },
-                    { new Guid("cccccccc-cccc-cccc-cccc-cccccccccccc"), 25.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Ender Dragon", null },
-                    { new Guid("d4d4d4d4-d4d4-d4d4-d4d4-d4d4d4d4d4d4"), 9.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, false, false, "Ghast", null },
-                    { new Guid("dddddddd-dddd-dddd-dddd-dddddddddddd"), 20.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Wither", null },
-                    { new Guid("e5e5e5e5-e5e5-e5e5-e5e5-e5e5e5e5e5e5"), 3.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Slime", null },
-                    { new Guid("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee"), 6.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Spider", null },
-                    { new Guid("ffffffff-ffff-ffff-ffff-ffffffffffff"), 10.00m, new DateTime(2026, 2, 14, 0, 0, 0, 0, DateTimeKind.Utc), null, true, false, "Diamond Steve", null }
-                });
+            migrationBuilder.CreateIndex(
+                name: "IX_CartItems_CartId_SkinId",
+                table: "CartItems",
+                columns: new[] { "CartId", "SkinId" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_CartItems_SkinId",
+                table: "CartItems",
+                column: "SkinId");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Carts_BuyerId",
+                table: "Carts",
+                column: "BuyerId",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_Purchases_BuyerId_SkinId",
+                table: "Purchases",
+                columns: new[] { "BuyerId", "SkinId" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Purchases_SkinId",
@@ -163,6 +229,16 @@ namespace MinecraftSkins.Infrastructure.Data.Migrations
                 table: "Roles",
                 column: "NormalizedName",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SearchQueryHistories_CreatedAtUtc",
+                table: "SearchQueryHistories",
+                column: "CreatedAtUtc");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_SearchQueryHistories_UserId",
+                table: "SearchQueryHistories",
+                column: "UserId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Skins_Name",
@@ -191,10 +267,19 @@ namespace MinecraftSkins.Infrastructure.Data.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
+                name: "CartItems");
+
+            migrationBuilder.DropTable(
                 name: "Purchases");
 
             migrationBuilder.DropTable(
+                name: "SearchQueryHistories");
+
+            migrationBuilder.DropTable(
                 name: "UserRoles");
+
+            migrationBuilder.DropTable(
+                name: "Carts");
 
             migrationBuilder.DropTable(
                 name: "Skins");

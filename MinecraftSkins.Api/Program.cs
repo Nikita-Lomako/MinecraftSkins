@@ -22,6 +22,7 @@ using MinecraftSkins.Domain.Interfaces;
 using MinecraftSkins.Domain.IRepositories;
 using MinecraftSkins.Infrastructure.Data;
 using MinecraftSkins.Infrastructure.Data.Extensions;
+using MinecraftSkins.Infrastructure.Configuration;
 using MinecraftSkins.Infrastructure.Repositories;
 using MinecraftSkins.Infrastructure.Services;
 using Serilog;
@@ -80,13 +81,18 @@ try
     builder.Services.AddScoped<ISkinRepository, SkinRepository>();
     builder.Services.AddScoped<IPurchaseRepository, PurchaseRepository>();
     builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+    builder.Services.AddScoped<ICartRepository, CartRepository>();
 
     // Register Services
     builder.Services.AddScoped<ISkinService, SkinService>();
     builder.Services.AddScoped<IPurchaseService, PurchaseService>();
     builder.Services.AddScoped<IAuthService, AuthService>();
+    builder.Services.AddScoped<ICartService, CartService>();
     builder.Services.AddScoped<IJwtService, JwtService>();
     builder.Services.AddScoped<IBtcRateService, BtcRateService>();
+    builder.Services.AddScoped<IQueryHistoryService, QueryHistoryService>();
+    builder.Services.Configure<QueryHistoryOptions>(builder.Configuration.GetSection(QueryHistoryOptions.SectionName));
+    builder.Services.AddHostedService<QueryHistoryCleanupHostedService>();
 
     // Register Price Calculator
     builder.Services.Configure<PriceCalculatorOptions>(builder.Configuration.GetSection(PriceCalculatorOptions.SectionName));
@@ -96,7 +102,8 @@ try
     // builder.Services.AddScoped<IPriceCalculator, PromoPriceCalculator>();
 
     // Configuration: "BtcRateProvider:Provider" = "CoinGecko" or "Binance"
-    builder.Services.AddBtcRateProviders(builder.Configuration);
+    builder.Services.AddSingleton<IBtcRateProvider>(new FakeBtcRateProvider(80000m));
+    //builder.Services.AddBtcRateProviders(builder.Configuration);
 
     // Register Idempotency Filter
     builder.Services.AddScoped(sp => new MinecraftSkins.Api.Filters.IdempotencyFilter(60));
@@ -192,19 +199,19 @@ try
 
     builder.Services.AddHttpContextAccessor();
 
-    // OpenTelemetry metrics pipeline:
-    builder.Services.AddOpenTelemetry()
-        .ConfigureResource(resource => resource.AddService(
-    serviceName: "MinecraftSkinsAPI",
-    serviceVersion: "1.0.0"))
-        .WithMetrics(metrics =>
-        {
-            metrics
-                .AddAspNetCoreInstrumentation()
-                .AddHttpClientInstrumentation()
-                .AddRuntimeInstrumentation()
-                .AddPrometheusExporter();
-        });
+    //// OpenTelemetry metrics pipeline:
+    //builder.Services.AddOpenTelemetry()
+    //    .ConfigureResource(resource => resource.AddService(
+    //serviceName: "MinecraftSkinsAPI",
+    //serviceVersion: "1.0.0"))
+    //    .WithMetrics(metrics =>
+    //    {
+    //        metrics
+    //            .AddAspNetCoreInstrumentation()
+    //            .AddHttpClientInstrumentation()
+    //            .AddRuntimeInstrumentation()
+    //            .AddPrometheusExporter();
+    //    });
 
     // CORS: разрешаем запросы с фронтенда (docker-compose: порт 3000; локальная разработка: 5173)
     builder.Services.AddCors(options =>
@@ -242,11 +249,12 @@ try
 
     app.UseAuthentication();
     app.UseAuthorization();
-    app.UseOpenTelemetryPrometheusScrapingEndpoint();
+    //app.UseOpenTelemetryPrometheusScrapingEndpoint();
 
     // Map Endpoints
     app.MapSkinEndpoints();
     app.MapPurchaseEndpoints();
+    app.MapCartEndpoints();
     app.MapAuthEndpoints();
     app.MapRateEndpoints();
     app.MapHealthEndpoints();
@@ -274,6 +282,7 @@ try
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
         var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
         var scopeLogger = scope.ServiceProvider.GetService<ILogger<Program>>();
+        await DataSeeder.EnsureSeedSkinsAsync(db, scopeLogger);
         await DataSeeder.EnsureSeedUsersAsync(userManager, roleManager, scopeLogger);
     }
 
