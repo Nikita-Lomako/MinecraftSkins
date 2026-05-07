@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { Container, Row, Col, Card, CardBody, CardTitle, CardFooter, Button } from 'shared/ui';
 import { loadCatalog } from '../api/catalogLoader';
 import { paginateSkins } from 'entities/skin/lib/skinListUtils';
+import { getPurchases } from 'entities/purchase';  // ← ДОБАВИЛ
 import { useCart } from 'features/cart';
 import { useAuth } from 'features/auth';
 
@@ -22,6 +22,7 @@ export function CatalogPage() {
     const [sortBy, setSortBy] = useState('Date');
     const [sortOrder, setSortOrder] = useState('Desc');
     const [search, setSearch] = useState('');
+    const [purchasedSkinIds, setPurchasedSkinIds] = useState(new Set()); // ← ДОБАВИЛ
     const { token } = useAuth();
     const { addToCart } = useCart();
 
@@ -47,6 +48,16 @@ export function CatalogPage() {
         load();
     }, [load]);
 
+    // ← ДОБАВИЛ: загружаем покупки пользователя
+    useEffect(() => {
+        if (!token) return;
+        getPurchases({ buyerId: undefined, take: 500 }, { token })
+            .then(purchases => {
+                setPurchasedSkinIds(new Set(purchases.map(p => p.skinId)));
+            })
+            .catch(() => { });
+    }, [token]);
+
     const totalSkins = allSkins.length;
     const skins = useMemo(
         () => paginateSkins(allSkins, { skip: page * PAGE_SIZE, take: PAGE_SIZE }),
@@ -55,120 +66,172 @@ export function CatalogPage() {
 
     const handleAddToCart = async (skinId) => {
         if (!token) return;
-        try {
-            await addToCart(skinId, 1);
-        } catch (err) {
-            // ignore
-        }
+        addToCart(skinId, 1);
     };
 
     return (
-        <Container className="py-4">
-            <h1 className="mb-4">Minecraft Skins</h1>
-            <p className="text-muted mb-3">
-                Prices are based on current BTC/USD rate. Add skins to cart to purchase.
-            </p>
-
-            <div className="mb-3 d-flex flex-wrap align-items-center gap-3">
-                <label className="me-2">
-                    <input
-                        type="checkbox"
-                        checked={showAll}
-                        onChange={(e) => {
-                            setShowAll(e.target.checked);
-                            setPage(0);
-                        }}
-                    />
-                    {' '}Show all (including unavailable)
-                </label>
-                <span className="d-flex align-items-center gap-2">
-                    <input
-                        className="form-control form-control-sm"
-                        placeholder="Search skins..."
-                        value={search}
-                        onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-                        style={{ width: 220 }}
-                    />
-                    <label className="small mb-0">Sort by</label>
-                    <select
-                        className="form-select form-select-sm"
-                        style={{ width: 'auto' }}
-                        value={sortBy}
-                        onChange={(e) => { setSortBy(e.target.value); setPage(0); }}
-                    >
-                        <option value="Date">Date added</option>
-                        <option value="Price">Price</option>
-                    </select>
-                    <select
-                        className="form-select form-select-sm"
-                        style={{ width: 'auto' }}
-                        value={sortOrder}
-                        onChange={(e) => { setSortOrder(e.target.value); setPage(0); }}
-                    >
-                        <option value="Desc">Desc</option>
-                        <option value="Asc">Asc</option>
-                    </select>
-                </span>
-            </div>
-
-            {error && (
-                <div className="alert alert-danger" role="alert">
-                    {error}
+        <div className="catalog-page">
+            <div className="catalog-page__container">
+                <div className="catalog-page__intro">
+                    <h1 className="catalog-page__heading">Minecraft Skins</h1>
+                    <p className="catalog-page__subheading">
+                        Prices are based on current BTC/USD rate. Add skins to cart to purchase.
+                    </p>
                 </div>
-            )}
 
-            {loading ? (
-                <p>Loading…</p>
-            ) : (
-                <Row>
-                    {skins.length === 0 ? (
-                        <Col><p>No skins found.</p></Col>
-                    ) : (
-                        skins.map((skin) => (
-                            <Col key={skin.id} size={12} className="mb-3">
-                                <Card>
-                                    <CardBody>
-                                        <CardTitle>
-                                            <Link to={`/skins/${skin.id}`}>{skin.name}</Link>
-                                        </CardTitle>
-                                        <p className="mb-0">
-                                            Base: {formatPrice(skin.basePriceUsd)} · Final: {formatPrice(skin.finalPrice ?? skin.basePriceUsd)}
-                                            {skin.currentBtcRate != null && (
-                                                <span className="text-muted small"> (rate: {Number(skin.currentBtcRate).toFixed(2)} USD/BTC)</span>
-                                            )}
-                                        </p>
-                                        <p className="mb-0 small">
-                                            {skin.isAvailable ? (
-                                                <span className="text-success">Available</span>
-                                            ) : (
-                                                <span className="text-secondary">Unavailable</span>
-                                            )}
-                                        </p>
-                                    </CardBody>
-                                    <CardFooter>
+                <div className="catalog-toolbar">
+                    <div className="catalog-toolbar__left">
+                        <label className="catalog-toolbar__filter-check">
+                            <input
+                                type="checkbox"
+                                checked={showAll}
+                                onChange={(e) => {
+                                    setShowAll(e.target.checked);
+                                    setPage(0);
+                                }}
+                            />
+                            <span>Show all (including unavailable)</span>
+                        </label>
+                        <p className="catalog-toolbar__count">
+                            {totalSkins} skin{totalSkins === 1 ? '' : 's'}
+                        </p>
+                    </div>
+
+                    <div className="catalog-toolbar__sort">
+                        <input
+                            className="catalog-toolbar__search"
+                            placeholder="Search skins..."
+                            value={search}
+                            onChange={(e) => {
+                                setSearch(e.target.value);
+                                setPage(0);
+                            }}
+                        />
+                        <span className="catalog-toolbar__sort-label">Sort by:</span>
+
+                        {/* ← ИСПРАВИЛ: оба селекта теперь в .catalog-sort */}
+                        <div className="catalog-sort">
+                            <select
+                                className="catalog-sort__select"
+                                value={sortBy}
+                                onChange={(e) => {
+                                    setSortBy(e.target.value);
+                                    setPage(0);
+                                }}
+                            >
+                                <option value="Date">Date added</option>
+                                <option value="Price">Price</option>
+                            </select>
+                            <span className="catalog-sort__chevron">
+                                <svg viewBox="0 0 24 24" fill="none" width="16" height="16">
+                                    <path
+                                        d="m6 9 6 6 6-6"
+                                        stroke="currentColor"
+                                        strokeWidth="2"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    />
+                                </svg>
+                            </span>
+                        </div>
+
+                        <div className="catalog-sort">
+                            <select
+                                className="catalog-sort__select"
+                                value={sortOrder}
+                                onChange={(e) => {
+                                    setSortOrder(e.target.value);
+                                    setPage(0);
+                                }}
+                            >
+                                <option value="Desc">Desc</option>
+                                <option value="Asc">Asc</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                {error && <div className="alert alert-danger">{error}</div>}
+
+                {loading ? (
+                    <p>Loading…</p>
+                ) : (
+                    <div className="catalog-grid">
+                        {skins.length === 0 ? (
+                            <p>No skins found.</p>
+                        ) : (
+                            skins.map((skin) => (
+                                <article key={skin.id} className="product-card">
+                                    <Link className="product-card__media" to={`/skins/${skin.id}`}>
+                                        <div
+                                            className="product-card__img"
+                                            style={{
+                                                background: '#f3f4f6',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                height: '100%',
+                                            }}
+                                        >
+                                            <span style={{ fontSize: '2rem' }}>🖼️</span>
+                                        </div>
+                                    </Link>
+                                    <div className="product-card__body">
+                                        <Link className="product-card__title-link" to={`/skins/${skin.id}`}>
+                                            <h3 className="product-card__title">{skin.name}</h3>
+                                        </Link>
+                                        <div className="product-card__footer">
+                                            <span className="product-card__price">
+                                                {formatPrice(skin.finalPrice ?? skin.basePriceUsd)}
+                                            </span>
+                                            <span className="product-card__category">
+                                                {skin.isAvailable ? 'Available' : 'Unavail.'}
+                                            </span>
+                                        </div>
+
+                                        {/* ← ИСПРАВИЛ: кнопка с проверкой на покупку */}
                                         {skin.isAvailable ? (
-                                            <Button variant="primary" onClick={() => handleAddToCart(skin.id)}>
-                                                Add to cart
-                                            </Button>
+                                            purchasedSkinIds.has(skin.id) ? (
+                                                <button className="product-card__btn" disabled>
+                                                    Purchased
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    className="product-card__btn"
+                                                    onClick={() => handleAddToCart(skin.id)}
+                                                >
+                                                    Add to cart
+                                                </button>
+                                            )
                                         ) : (
-                                            <Button disabled>Unavailable</Button>
+                                            <button className="product-card__btn" disabled>
+                                                Unavailable
+                                            </button>
                                         )}
-                                    </CardFooter>
-                                </Card>
-                            </Col>
-                        ))
-                    )}
-                </Row>
-            )}
+                                    </div>
+                                </article>
+                            ))
+                        )}
+                    </div>
+                )}
 
-            <div className="d-flex gap-2 mt-3">
-                <Button variant="secondary" disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                    Previous
-                </Button>
-                <Button variant="secondary" disabled={skins.length < PAGE_SIZE || (page + 1) * PAGE_SIZE >= totalSkins} onClick={() => setPage((p) => p + 1)}>
-                    Next
-                </Button>
+                <div className="d-flex gap-2 mt-3">
+                    <button
+                        className="btn btn-secondary"
+                        disabled={page === 0}
+                        onClick={() => setPage((p) => p - 1)}
+                    >
+                        Previous
+                    </button>
+                    <button
+                        className="btn btn-secondary"
+                        disabled={skins.length < PAGE_SIZE || (page + 1) * PAGE_SIZE >= totalSkins}
+                        onClick={() => setPage((p) => p + 1)}
+                    >
+                        Next
+                    </button>
+                </div>
             </div>
-        </Container>
+        </div>
     );
 }

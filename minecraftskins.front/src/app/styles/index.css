@@ -1,6 +1,16 @@
-/* Minimal layout and component styles (Bootstrap-like) */
-* { box-sizing: border-box; }
-body { margin: 0; font-family: system-ui, sans-serif; }
+@import './store.css';
+
+body {
+    margin: 0;
+    font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: #141414;
+    background: #f9fafb;
+}
+
+a {
+    color: inherit;
+    text-decoration: none;
+}
 
 .container { max-width: 960px; margin: 0 auto; padding: 0 1rem; }
 .row { display: flex; flex-wrap: wrap; margin: 0 -0.5rem; }
